@@ -1,5 +1,4 @@
-#ifndef _MAGIC_H_
-#define _MAGIC_H_
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -30,5 +29,3 @@ uint64_t generate_rook_attacks(int square, uint64_t occupancy);
 uint64_t generate_bishop_attacks(int square, uint64_t occupancy);
 uint64_t generate_queen_attacks(int square, uint64_t occupancy);
 void test_magic_bitboards(void);
-
-#endif

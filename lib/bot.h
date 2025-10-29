@@ -1,5 +1,4 @@
-#ifndef _BOT_H_
-#define _BOT_H_
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -45,5 +44,3 @@ static inline int is_capture(board *B, int side_to_move, const move_t *m);
 static inline int victim_square(board *B, int side_to_move, int sq);
 static void move_sort(move_t *mv, int n);
 static void score_moves(board *B, move_t *mv, int n, int side_to_move, int ply);
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef _MANAGER_H_
-#define _MANAGER_H_
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -27,5 +26,3 @@ int pi(char file, char rank);
 void ip(int index, char *file, char *rank);
 uint64_t imove(int piece, uint64_t from_mask, board *B, int *white);
 void test_position(board *B);
-
-#endif

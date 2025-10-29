@@ -1,5 +1,4 @@
-#ifndef _EVAL_H_
-#define _EVAL_H_
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -146,5 +145,3 @@ static inline int pop_lsb(uint64_t *bb);
 void init_pesto_tables(void);
 void pesto_terms(board *B, int *mg, int *eg, int *p24);
 int blended_eval(board *B); // blended eval function
-
-#endif

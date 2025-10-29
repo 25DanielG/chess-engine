@@ -1,5 +1,4 @@
-#ifndef _BOARD_H_
-#define _BOARD_H_
+#pragma once
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -128,5 +127,3 @@ static inline uint64_t white_attacks(const board *B);
 static inline uint64_t black_attacks(const board *B);
 static inline void add_castles(board *B, int white, move_t **list, int *count, int *max_moves);
 int square_attacker(const board *B_in, int square, int by_black);
-
-#endif
