@@ -11,6 +11,7 @@
 
 // CONFIG
 
+#define GRAPHICS (1) // graphics
 #define WHITE_BOT (0)
 #define BLACK_BOT (1)
 #define WHITE_DEPTH (15)
@@ -18,6 +19,7 @@
 #define WHITE_LIMIT (5) // sec
 #define BLACK_LIMIT (10) // sec
 
+void start(void);
 int run(void);
 void out(board *B, int mode); // 0 letter, 1 piece
 int parse(const char *input, int *from, int *to);

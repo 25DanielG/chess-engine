@@ -4,7 +4,7 @@
 #include "lib/ui_sdl.h"
 
 int main() {
-  run_sdl();
+  start();
   // test_magic_bitboards();
   return 0;
 }

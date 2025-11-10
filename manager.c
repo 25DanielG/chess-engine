@@ -8,6 +8,16 @@
 #include "lib/bot.h"
 #include "lib/eval.h"
 #include "lib/magic.h"
+#include "lib/ui_sdl.h"
+
+
+void start(void) {
+  if (GRAPHICS) {
+    run_sdl();
+  } else {
+    run();
+  }
+}
 
 int run(void) {
   init_attack_tables();
