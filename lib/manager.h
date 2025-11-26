@@ -12,7 +12,7 @@
 
 // CONFIG
 
-#define GRAPHICS (0) // graphics
+#define GRAPHICS (1) // graphics
 #define WHITE_BOT (0)
 #define BLACK_BOT (1)
 #define WHITE_DEPTH (15)

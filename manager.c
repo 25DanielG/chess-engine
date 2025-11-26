@@ -30,7 +30,7 @@ int run(void) {
     fprintf(stderr, "WARNING: failed to load opening book, continuing without it.\n");
   }
 #ifdef DEBUG
-  printf("Initialized attack tables.\n");
+  printf("Initialized attack & pesto tables and opening book.\n");
 #endif
   board *B = init_board();
   // test_position(B); // for testing hardcoded positions

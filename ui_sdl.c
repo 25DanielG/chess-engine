@@ -8,6 +8,7 @@
 #include "lib/eval.h"
 #include "lib/ui_sdl.h"
 #include "lib/utils.h"
+#include "lib/opening.h"
 
 const char* TEX_PATHS[TEX_COUNT] = {
   "assets/wP.gif", "assets/wN.gif", "assets/wB.gif",
@@ -145,6 +146,13 @@ int run_sdl(void) {
 
   init_attack_tables();
   init_pesto_tables();
+  init_opening_book();
+  if (!load_openings("high_elo_opening.csv")) {
+    fprintf(stderr, "WARNING: failed to load opening book, continuing without it.\n");
+  }
+#ifdef DEBUG
+  printf("Initialized attack & pesto tables and opening book.\n");
+#endif
   board* B = init_board();
 
   bot *bwhite = NULL, *bblack = NULL;
@@ -160,35 +168,110 @@ int run_sdl(void) {
 
   while (running) {
     if (B->white && WHITE_BOT) {
-      printf("Requested WHITE_BOT move.\n");
-      int best = find_move(bwhite, B->white, bwhite->limit);
+      int best = -1;
+      int from = -1, to = -1;
+      int type = -1;
+
+      open_node *book_node = get_book_move(move_history, history_len);
+      if (book_node && book_node->move_code >= 0) {
+        best = book_node->move_code;
+        from = best / 64;
+        to = best % 64;
+        type = 0; // opening book
+      }
+
       if (best == -1) {
-        printf("WHITE_BOT has no legal moves. Game over.\n");
-        break;
+        best = find_move(bwhite, B->white, bwhite->limit);
+        if (best == -1) {
+          printf("WHITE_BOT has no legal moves. Game over.\n");
+          break;
+        }
+        from = best / 64;
+        to = best % 64;
+        type = 1; // bot move
       }
-      int from = best / 64, to = best % 64;
+
+      uint64_t to_mask = 1ULL << to;
+      int capture = (B->blacks & to_mask) != 0;
+      int pt = piece_at(B, from);
+      printf("Played %c%c to %c%c\n", 'a' + (from % 8), '1' + (from / 8), 'a' + (to % 8), '1' + (to / 8));
+#ifdef DEBUG
+      char *move_type = (type == 0) ? "opening book" : "bot calculation";
+      printf("Move type: %s\n", move_type);
+#endif
+
       if (!execute(B, from, to, &B->white)) {
-        printf("WHITE_BOT invalid?!\n");
+        printf("WHITE_BOT invalid move.\n");
         break;
       }
+      add_history(pt, from, to, capture); // track history
       ++ply;
       move = ply / 2;
       B->white = !B->white;
+#ifdef DEBUG
+      const char *line_name = NULL;
+      int matched = get_line_info(move_history, history_len, &line_name);
+      if (matched == history_len && line_name) {
+        printf("Current line: %s\n", line_name);
+      } else if (matched > 0 && line_name) {
+        printf("Current line (up to move %d): %s (now off book)\n", matched, line_name);
+      } else if (matched == 0) {
+        printf("No book line for this game so far.\n");
+      }
+#endif
     } else if (!B->white && BLACK_BOT) {
-      printf("Requested BLACK_BOT move.\n");
-      int best = find_move(bblack, B->white, bblack->limit);
+      int best = -1;
+      int from = -1, to = -1;
+      int type = -1;
+
+      open_node *book_node = get_book_move(move_history, history_len);
+      if (book_node && book_node->move_code >= 0) {
+        best = book_node->move_code;
+        from = best / 64;
+        to = best % 64;
+        type = 0; // opening book
+      }
+
       if (best == -1) {
-        printf("BLACK_BOT has no legal moves. Game over.\n");
-        break;
+        int side_to_move = B->white; 
+        best = find_move(bblack, side_to_move, bblack->limit);
+        if (best == -1) {
+          printf("BLACK_BOT has no legal moves. Game over.\n");
+          break;
+        }
+        from = best / 64;
+        to = best % 64;
+        type = 1; // bot move
       }
-      int from = best / 64, to = best % 64;
+
+      uint64_t to_mask = 1ULL << to;
+      int capture = (B->whites & to_mask) != 0;
+      int pt = piece_at(B, from);
+      printf("Played %c%c to %c%c\n", 'a' + (from % 8), '1' + (from / 8), 'a' + (to % 8), '1' + (to / 8));
+#ifdef DEBUG
+      char *move_type = (type == 0) ? "opening book" : "bot calculation";
+      printf("Move type: %s\n", move_type);
+#endif
+
       if (!execute(B, from, to, &B->white)) {
-        printf("BLACK_BOT invalid?!\n");
+        printf("BLACK_BOT invalid!\n");
         break;
       }
+      add_history(pt, from, to, capture); // track history
       ++ply;
       move = ply / 2;
       B->white = !B->white;
+#ifdef DEBUG
+      const char *line_name = NULL;
+      int matched = get_line_info(move_history, history_len, &line_name);
+      if (matched == history_len && line_name) {
+        printf("Current line: %s\n", line_name);
+      } else if (matched > 0 && line_name) {
+        printf("Current line (up to move %d): %s (now off book)\n", matched, line_name);
+      } else if (matched == 0) {
+        printf("No book line for this game so far.\n");
+      }
+#endif
     }
 
     SDL_Event e;
@@ -212,7 +295,11 @@ int run_sdl(void) {
           } else {
             board_snapshot snap; save_snapshot(B, &snap); // attempt move
             int from = selected, to = idx;
+            uint64_t to_mask = 1ULL << to;
+            int capture = (B->blacks & to_mask) != 0;
+            int pt = piece_at(B, from);
             if (from != to && execute(B, from, to, &B->white)) {
+              add_history(pt, from, to, capture); // track history
               ++ply;
               move = ply / 2;
               selected = -1;
@@ -246,6 +333,8 @@ int run_sdl(void) {
     SDL_RenderPresent(R);
   }
 
+  free_history();
+  free_opening_book();
   free_board(B);
   for (int i = 0; i < TEX_COUNT; ++i)
     if(tex[i])
