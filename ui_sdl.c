@@ -7,6 +7,7 @@
 #include "lib/manager.h"
 #include "lib/eval.h"
 #include "lib/ui_sdl.h"
+#include "lib/utils.h"
 
 const char* TEX_PATHS[TEX_COUNT] = {
   "assets/wP.gif", "assets/wN.gif", "assets/wB.gif",
@@ -14,10 +15,6 @@ const char* TEX_PATHS[TEX_COUNT] = {
   "assets/bP.gif", "assets/bN.gif", "assets/bB.gif", 
   "assets/bR.gif", "assets/bQ.gif", "assets/bK.gif"
 };
-
-static inline int index_rank(int rank, int file) {
-  return (rank * 8) + file;
-}
 
 static inline int rank_pixel(int x, int y, int* rank, int* file) { // y = 0 -> rank 7
   x -= MARGIN;

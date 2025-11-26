@@ -9,7 +9,10 @@
 #include "lib/eval.h"
 #include "lib/magic.h"
 #include "lib/ui_sdl.h"
+#include "lib/utils.h"
+#include "lib/opening.h"
 
+int history_len = 0;
 
 void start(void) {
   if (GRAPHICS) {
@@ -22,6 +25,10 @@ void start(void) {
 int run(void) {
   init_attack_tables();
   init_pesto_tables();
+  init_opening_book();
+  if (!load_openings("high_elo_opening.csv")) {
+    fprintf(stderr, "WARNING: failed to load opening book, continuing without it.\n");
+  }
 #ifdef DEBUG
   printf("Initialized attack tables.\n");
 #endif
@@ -52,19 +59,53 @@ int run(void) {
     save_snapshot(B, &snap);
     if (B->white) {
       if (WHITE_BOT) {
-        printf("Requested WHITE_BOT move.\n");
-        int best = find_move(bwhite, B->white, bwhite->limit);
-        if (best == -1) {
-          printf("WHITE_BOT has no legal moves. Game over.\n");
-          break;
+        int best = -1;
+        int from = -1, to = -1;
+        int type = -1;
+
+        open_node *book_node = get_book_move(move_history, history_len);
+        if (book_node && book_node->move_code >= 0) {
+          best = book_node->move_code;
+          from = best / 64;
+          to = best % 64;
+          type = 0; // opening book
         }
-        from = best / 64;
-        to = best % 64;
+
+        if (best == -1) {
+          best = find_move(bwhite, B->white, bwhite->limit);
+          if (best == -1) {
+            printf("WHITE_BOT has no legal moves. Game over.\n");
+            break;
+          }
+          from = best / 64;
+          to = best % 64;
+          type = 1; // bot move
+        }
+
+        uint64_t to_mask = 1ULL << to;
+        int capture = (B->blacks & to_mask) != 0;
+        int pt = piece_at(B, from);
         printf("Played %c%c to %c%c\n", 'a' + (from % 8), '1' + (from / 8), 'a' + (to % 8), '1' + (to / 8));
+#ifdef DEBUG
+        char *move_type = (type == 0) ? "opening book" : "bot calculation";
+        printf("Move type: %s\n", move_type);
+#endif
         if (execute(B, from, to, &B->white)) {
+          add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
           B->white = !B->white;
+#ifdef DEBUG
+          const char *line_name = NULL;
+          int matched = get_line_info(move_history, history_len, &line_name);
+          if (matched == history_len && line_name) {
+            printf("Current line: %s\n", line_name);
+          } else if (matched > 0 && line_name) {
+            printf("Current line (up to move %d): %s (now off book)\n", matched, line_name);
+          } else if (matched == 0) {
+            printf("No book line for this game so far.\n");
+          }
+#endif
         } else {
           printf("WHITE_BOT invalid move.\n");
           exit(1);
@@ -79,7 +120,13 @@ int run(void) {
           continue;
         }
         printf("From: %d, To: %d\n", from, to);
+
+        uint64_t to_mask = 1ULL << to;
+        int capture = (B->blacks & to_mask) != 0;
+        int pt = piece_at(B, from);
+
         if (execute(B, from, to, &B->white)) {
+          add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
           B->white = !B->white;
@@ -90,19 +137,55 @@ int run(void) {
       }
     } else {
       if (BLACK_BOT) {
-        printf("Requested BLACK_BOT move.\n");
-        int best = find_move(bblack, B->white, bblack->limit);
-        if (best == -1) {
-          printf("BLACK_BOT has no legal moves. Game over.\n");
-          break;
+        int best = -1;
+        int from = -1, to = -1;
+        int type = -1;
+
+        open_node *book_node = get_book_move(move_history, history_len);
+        if (book_node && book_node->move_code >= 0) {
+          best = book_node->move_code;
+          from = best / 64;
+          to = best % 64;
+          type = 0; // opening book
         }
-        from = best / 64;
-        to = best % 64;
+
+        if (best == -1) {
+          int side_to_move = B->white; 
+          best = find_move(bblack, side_to_move, bblack->limit);
+          if (best == -1) {
+            printf("BLACK_BOT has no legal moves. Game over.\n");
+            break;
+          }
+          from = best / 64;
+          to = best % 64;
+          type = 1; // bot move
+        }
+
+        uint64_t to_mask = 1ULL << to;
+        int capture = (B->whites & to_mask) != 0;
+        int pt = piece_at(B, from);
+
         printf("Played %c%c to %c%c\n", 'a' + (from % 8), '1' + (from / 8), 'a' + (to % 8), '1' + (to / 8));
+#ifdef DEBUG
+        char *move_type = (type == 0) ? "opening book" : "bot calculation";
+        printf("Move type: %s\n", move_type);
+#endif
         if (execute(B, from, to, &B->white)) {
+          add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
           B->white = !B->white;
+#ifdef DEBUG
+          const char *line_name = NULL;
+          int matched = get_line_info(move_history, history_len, &line_name);
+          if (matched == history_len && line_name) {
+            printf("Current line: %s\n", line_name);
+          } else if (matched > 0 && line_name) {
+            printf("Current line (up to move %d): %s (now off book)\n", matched, line_name);
+          } else if (matched == 0) {
+            printf("No book line for this game so far.\n");
+          }
+#endif
         } else {
           printf("BLACK_BOT invalid move.\n");
           exit(1);
@@ -117,7 +200,13 @@ int run(void) {
           continue;
         }
         printf("From: %d, To: %d\n", from, to);
+
+        uint64_t to_mask = 1ULL << to;
+        int capture = (B->blacks & to_mask) != 0;
+        int pt = piece_at(B, from);
+
         if (execute(B, from, to, &B->white)) {
+          add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
           B->white = !B->white;
@@ -129,6 +218,8 @@ int run(void) {
     }
   }
 
+  free_history();
+  free_opening_book();
   free_board(B);
   return 0;
 }
@@ -170,11 +261,6 @@ int parse(const char *input, int *from, int *to) {
   *from = pi(from_file, from_rank);
   *to = pi(to_file, to_rank);
   return (*from >= 0 && *to >= 0);
-}
-
-int pi(char file, char rank) {
-  if (file < 'a' || file > 'h' || rank < '1' || rank > '8') return -1;
-  return (rank - '1') * 8 + (file - 'a');
 }
 
 int execute(board *B, int from, int to, int *white) {
@@ -263,12 +349,6 @@ int execute(board *B, int from, int to, int *white) {
   return 1;
 }
 
-
-void ip(int index, char *file, char *rank) {
-  *file = 'a' + (index % 8);
-  *rank = '1' + (index / 8);
-}
-
 uint64_t imove(int piece, uint64_t from_mask, board *B, int *white) {
   uint64_t moves;
   switch (piece)
@@ -342,4 +422,19 @@ void test_position(board *B) {
   };
   int w = 1;
   load_position(B, white, black, w);
+}
+
+void add_history(int pt, int from, int to, int capture) {
+  if (history_len >= MAX_GAME_MOVES) return;
+  char buf[10];
+  san_from_move(pt, from, to, capture, buf, sizeof(buf));
+  move_history[history_len] = strdup(buf);
+  ++history_len;
+}
+
+void free_history(void) {
+  for (int i = 0; i < history_len; ++i) {
+    free(move_history[i]);
+  }
+  history_len = 0;
 }

@@ -3,3 +3,4 @@ a.out
 *.o
 *.dSYM
 chess
+.DS_Store

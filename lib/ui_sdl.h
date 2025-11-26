@@ -16,7 +16,6 @@ typedef enum {
     TEX_COUNT
 } TexId;
 
-static inline int index_rank(int rank, int file);
 static inline int rank_pixel(int x, int y, int* rank, int* file);
 static int piece_tex(const board* B, int index, TexId* out);
 static void draw_board(SDL_Renderer* R);
