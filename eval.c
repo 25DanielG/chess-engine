@@ -59,21 +59,24 @@ int mid_eval(board *B) {
 }
 
 int phase(board *B) {
-  if (TOTAL_PHASE == 0) {
-    fprintf(stderr, "TOTAL_PHASE is 0\n");
-    exit(1);
-  }
-  int phase = TOTAL_PHASE;
-  phase -= __builtin_popcountl(B->WHITE[KNIGHT]) + __builtin_popcountl(B->BLACK[KNIGHT]);
-  phase -= __builtin_popcountl(B->WHITE[BISHOP]) + __builtin_popcountl(B->BLACK[BISHOP]);
-  phase -= __builtin_popcountl(B->WHITE[ROOK]) + __builtin_popcountl(B->BLACK[ROOK]);
-  phase -= __builtin_popcountl(B->WHITE[QUEEN]) + __builtin_popcountl(B->BLACK[QUEEN]);
+  int phase = 0;
+  phase += __builtin_popcountll(B->WHITE[KNIGHT]) * KNIGHT_PHASE;
+  phase += __builtin_popcountll(B->BLACK[KNIGHT]) * KNIGHT_PHASE;
+  phase += __builtin_popcountll(B->WHITE[BISHOP]) * BISHOP_PHASE;
+  phase += __builtin_popcountll(B->BLACK[BISHOP]) * BISHOP_PHASE;
+  phase += __builtin_popcountll(B->WHITE[ROOK]) * ROOK_PHASE;
+  phase += __builtin_popcountll(B->BLACK[ROOK]) * ROOK_PHASE;
+  phase += __builtin_popcountll(B->WHITE[QUEEN]) * QUEEN_PHASE;
+  phase += __builtin_popcountll(B->BLACK[QUEEN]) * QUEEN_PHASE;
+
+  if (phase > TOTAL_PHASE)
+    phase = TOTAL_PHASE;
   return (phase * 128) / TOTAL_PHASE;
 }
 
 int scale(board *B, int eg_score) {
-  int no_wpawns = (__builtin_popcountl(B->WHITE[PAWN]) == 0);
-  int no_bpawns = (__builtin_popcountl(B->BLACK[PAWN]) == 0);
+  int no_wpawns = (__builtin_popcountll(B->WHITE[PAWN]) == 0);
+  int no_bpawns = (__builtin_popcountll(B->BLACK[PAWN]) == 0);
   if (no_wpawns || no_bpawns) return HALF_SCALE;
   int wking_mobile = B->WHITE[KING] & ~RANK_1 & ~RANK_2;
   int bking_mobile = B->BLACK[KING] & ~RANK_8 & ~RANK_7;
@@ -92,8 +95,9 @@ int end_mat_eval(board *B) {
 }
 
 int king_activity(board *B) {
-  int wking = B->WHITE[KING] & RANK_3 & RANK_4 & RANK_5 & RANK_6;
-  int bking = B->BLACK[KING] & RANK_3 & RANK_4 & RANK_5 & RANK_6;
+  uint64_t mid_ranks = RANK_3 | RANK_4 | RANK_5 | RANK_6;
+  int wking = (B->WHITE[KING] & mid_ranks) != 0;
+  int bking = (B->BLACK[KING] & mid_ranks) != 0;
   int w = wking ? (ACTIVE_KING) : 0;
   int b = bking ? (ACTIVE_KING) : 0;
   return (w - b);
@@ -113,6 +117,26 @@ int passed_pawns(board *B) {
   uint64_t wpass = sided_passed_pawns(wp, bp, 1);
   uint64_t bpass = sided_passed_pawns(bp, wp, 0);
   return (PAWN_PASSED * (__builtin_popcountll(wpass) - __builtin_popcountll(bpass)));
+}
+
+int development(board *B) {
+  int score = 0;
+  uint64_t wminors = B->WHITE[KNIGHT] | B->WHITE[BISHOP]; // white minor pieces
+  int w_undeveloped = __builtin_popcountll(wminors & RANK_1);
+  uint64_t bminors = B->BLACK[KNIGHT] | B->BLACK[BISHOP]; // black minor pieces
+  int b_undeveloped = __builtin_popcountll(bminors & RANK_8);
+  score -= DEV_PENALTY * w_undeveloped;
+  score += DEV_PENALTY * b_undeveloped;
+  return score;
+}
+
+int castle_eval(const board *B) {
+  int score = 0;
+  if (B->cc & (WKS | WQS)) // white castled
+    score += CASTLE_PT;
+  if (B->cc & (BKS | BQS)) // black castled
+    score -= CASTLE_PT;
+  return score;
 }
 
 int end_eval(board *B) {
@@ -190,11 +214,11 @@ int blended_eval(board *B) {
   int ka = king_activity(B);
   int pstr = pawn_structure(B);
   int pps = passed_pawns(B);
-  int castle = (B->castle & 0b1100) == 0b1100 ? 1 : (B->castle & 0b0011) == 0b0011 ? -1 : 0;
-  // int cc = (B->cc & 0b1100) == 0b1100 ? CASTLE_CC : (B->cc & 0b0011) == 0b0011 ? -CASTLE_CC : 0;
+  int castle = castle_eval(B);
+  int dev = development(B);
 
   // feature sums
-  int mg_feats = (MOBILITY_MG * mob) + (CENTER_MG * ctr) + (KING_SAFETY_MG * ks) + (CASTLE_PT * castle);
+  int mg_feats = (MOBILITY_MG * mob) + (CENTER_MG * ctr) + (KING_SAFETY_MG * ks) + (CASTLE_PT * castle) + (DEV_MG * dev);;
   int eg_feats = (MOBILITY_EG * mob) + (CENTER_EG * ctr) + (KING_ACTIVITY_EG * ka) + (PSTRUCT_EG * pstr) + (PASSED_EG * pps);
 
   int mg_total = mg_psqt + mg_feats;

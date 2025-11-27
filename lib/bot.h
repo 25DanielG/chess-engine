@@ -10,8 +10,9 @@
 #define MATE (32000)
 #define OUTPUT_LINES (1)
 #define NODE_CHECK (2047)
-#define MAX_PLY 128
-#define NONE_PIECE 255
+#define MAX_PLY (128)
+#define MAX_QPLY (16)
+#define NONE_PIECE (255)
 
 struct bot_header {
     board *B;
@@ -38,7 +39,8 @@ static inline int time_over(void);
 bot *init_bot(board *B, int white, int depth, int limit);
 double gtime(void);
 int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int ply);
-int quiesce(board *B, int side, int alpha, int beta, long *info);
+int quiesce(board *B, int side, int alpha, int beta, long *info, int qply);
+int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply);
 int find_move(bot *bot, int is_white, int limit);
 static inline int is_capture(board *B, int side_to_move, const move_t *m);
 static inline int victim_square(board *B, int side_to_move, int sq);

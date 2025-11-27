@@ -63,7 +63,14 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   int old = B->white;
   B->white = max;
   if (depth == 0) {
-    int v = quiesce(B, max, alpha, beta, info);
+    int in_check = check(B, !max);
+    if (in_check) {
+      int v = oneply_check(B, max, alpha, beta, info, ply);
+      B->white = old;
+      return v;
+    }
+
+    int v = quiesce(B, max, alpha, beta, info, 0);
     B->white = old;
     return v;
   }
@@ -92,17 +99,32 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       beta = (eval < beta) ? eval : beta;
     }
     restore_snapshot(B, &snap);
-    if (beta <= alpha) break;
+    if (beta <= alpha) {
+      if (!is_capture(B, max, &moves[i])) {
+        if (!equals(killer1[ply], moves[i])) { // update killer
+          killer2[ply] = killer1[ply];
+          killer1[ply] = moves[i];
+        }
+        history_tbl[max][moves[i].piece][moves[i].to] += depth * depth; // update history
+      }
+      break;
+    }
   }
   free(moves);
   B->white = old;
   return best;
 }
 
-int quiesce(board *B, int side, int alpha, int beta, long *info) {
+int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
 #ifdef DEBUG
   *(info + 2) += 1;
 #endif
+  if (time_over())
+    return side ? alpha : beta;
+  
+  if (qply > MAX_QPLY)
+    return blended_eval(B);
+
   // 1 = white (max), 0 = black (min)
   int stand = blended_eval(B);
   if (side) { // max
@@ -116,8 +138,8 @@ int quiesce(board *B, int side, int alpha, int beta, long *info) {
   #define MAX_MOVES 256
   static move_t caps[MAX_MOVES];
   int n = 0;
-  move_t *mv; int mcount = 0;
-  movegen(B, side, &mv, 0); // pseudo legal
+  move_t *mv;
+  int mcount = movegen(B, side, &mv, 0); // pseudo legal
 
   // filter captures
   for (int i = 0; i < mcount; ++i) {
@@ -138,7 +160,7 @@ int quiesce(board *B, int side, int alpha, int beta, long *info) {
       continue;
     }
 
-    int score = quiesce(B, !side, alpha, beta, info);
+    int score = quiesce(B, !side, alpha, beta, info, qply + 1);
     restore_snapshot(B, &S);
 
     if (side) {
@@ -151,6 +173,41 @@ int quiesce(board *B, int side, int alpha, int beta, long *info) {
   }
 
   return side ? alpha : beta;
+}
+
+int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) { // assumes B->white == side and side is in check
+  move_t *moves;
+  int move_count = movegen(B, side, &moves, 1);  // legal moves only
+
+  if (move_count == 0) {
+    int score = side ? -MATE + ply : +MATE - ply;
+    free(moves);
+    return score;
+  }
+
+  int best = side ? INT32_MIN : INT32_MAX;
+
+  for (int i = 0; i < move_count; ++i) {
+    board_snapshot snap;
+    save_snapshot(B, &snap);
+    fast_execute(B, moves[i].piece, moves[i].from, moves[i].to, side);
+
+    int child = minimax(B, 0, !side, alpha, beta, info, ply + 1);
+    restore_snapshot(B, &snap);
+
+    if (side) {
+      if (child > best) best = child;
+      if (child > alpha) alpha = child;
+    } else {
+      if (child < best) best = child;
+      if (child < beta)  beta  = child;
+    }
+
+    if (beta <= alpha) break;
+  }
+
+  free(moves);
+  return best;
 }
 
 int find_move(bot *bot, int is_white, int limit) {

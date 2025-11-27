@@ -25,6 +25,8 @@
 #define TEMPO_BONUS (10)
 #define MOBILITY_MG (2)
 #define MOBILITY_EG (1)
+#define DEV_MG (2)
+#define DEV_PENALTY (1)
 #define CENTER_MG (4)
 #define CENTER_EG (1)
 #define KING_SAFETY_MG (8)
@@ -140,6 +142,8 @@ int end_mat_eval(board *B);
 int king_activity(board *B);
 int pawn_structure(board *B);
 int passed_pawns(board *B);
+int development(board *B);
+int castle_eval(const board *B);
 int end_eval(board *B);
 static inline int pop_lsb(uint64_t *bb);
 void init_pesto_tables(void);
