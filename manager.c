@@ -25,7 +25,8 @@ void start(void) {
 int run(void) {
   init_attack_tables();
   init_pesto_tables();
-  init_opening_book();
+  if (OPENING_BOOK)
+    init_opening_book();
   if (!load_openings("high_elo_opening.csv")) {
     fprintf(stderr, "WARNING: failed to load opening book, continuing without it.\n");
   }
@@ -63,12 +64,14 @@ int run(void) {
         int from = -1, to = -1;
         int type = -1;
 
-        open_node *book_node = get_book_move(move_history, history_len);
-        if (book_node && book_node->move_code >= 0) {
-          best = book_node->move_code;
-          from = best / 64;
-          to = best % 64;
-          type = 0; // opening book
+        if (OPENING_BOOK) {
+          open_node *book_node = get_book_move(move_history, history_len);
+          if (book_node && book_node->move_code >= 0) {
+            best = book_node->move_code;
+            from = best / 64;
+            to = best % 64;
+            type = 0; // opening book
+          }
         }
 
         if (best == -1) {
@@ -141,12 +144,14 @@ int run(void) {
         int from = -1, to = -1;
         int type = -1;
 
-        open_node *book_node = get_book_move(move_history, history_len);
-        if (book_node && book_node->move_code >= 0) {
-          best = book_node->move_code;
-          from = best / 64;
-          to = best % 64;
-          type = 0; // opening book
+        if (OPENING_BOOK) {
+          open_node *book_node = get_book_move(move_history, history_len);
+          if (book_node && book_node->move_code >= 0) {
+            best = book_node->move_code;
+            from = best / 64;
+            to = best % 64;
+            type = 0; // opening book
+          }
         }
 
         if (best == -1) {

@@ -7,6 +7,10 @@
 #include "lib/board.h"
 #include "lib/manager.h"
 #include "lib/eval.h"
+#include "lib/utils.h"
+
+move_t move_stack[MAX_PLY][MAX_MOVES];
+move_t qmove_stack[MAX_QPLY][MAX_MOVES];
 
 static const int PIECE_PT[64] = {
   -1, /*1*/ PAWN, /*2*/ KNIGHT, -1, /*4*/ BISHOP, -1, -1, -1, /*8*/ ROOK, -1, -1, -1, -1, -1, -1, -1,
@@ -76,11 +80,10 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   }
   int best = max ? INT32_MIN : INT32_MAX;
   move_t *moves;
-  int move_count = movegen(B, max, &moves, 1);
+  int move_count = movegen_ply(B, max, 1, ply, &moves, move_stack, MAX_MOVES);
   if (move_count == 0) {
     int v = check(B, max) ? (max ? -MATE + ply : +MATE - ply) : 0;
     B->white = old;
-    free(moves);
     return v;
   }
   score_moves(B, moves, move_count, max, ply);
@@ -110,7 +113,6 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       break;
     }
   }
-  free(moves);
   B->white = old;
   return best;
 }
@@ -122,7 +124,7 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
   if (time_over())
     return side ? alpha : beta;
   
-  if (qply > MAX_QPLY)
+  if (qply >= MAX_QPLY)
     return blended_eval(B);
 
   // 1 = white (max), 0 = black (min)
@@ -135,11 +137,10 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
     if (stand < beta)   beta = stand;
   }
 
-  #define MAX_MOVES 256
   static move_t caps[MAX_MOVES];
   int n = 0;
   move_t *mv;
-  int mcount = movegen(B, side, &mv, 0); // pseudo legal
+  int mcount = movegen_ply(B, side, 0, qply, &mv, qmove_stack, MAX_MOVES); // pseudo legal
 
   // filter captures
   for (int i = 0; i < mcount; ++i) {
@@ -148,8 +149,6 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
     if (is_cap) caps[n++] = mv[i];
     if (n == MAX_MOVES) break;
   }
-
-  free(mv);
 
   for (int i = 0; i < n; ++i) {
     board_snapshot S; save_snapshot(B, &S);
@@ -177,11 +176,10 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
 
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) { // assumes B->white == side and side is in check
   move_t *moves;
-  int move_count = movegen(B, side, &moves, 1);  // legal moves only
+  int move_count = movegen_ply(B, side, 1, ply, &moves, move_stack, MAX_MOVES);  // legal moves only
 
   if (move_count == 0) {
     int score = side ? -MATE + ply : +MATE - ply;
-    free(moves);
     return score;
   }
 
@@ -206,7 +204,6 @@ int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) {
     if (beta <= alpha) break;
   }
 
-  free(moves);
   return best;
 }
 
@@ -229,7 +226,7 @@ int find_move(bot *bot, int is_white, int limit) {
   int move = -1;
   int best = is_white ? INT32_MIN : INT32_MAX;
   move_t *moves;
-  int move_count = movegen(bot->B, is_white, &moves, 1);
+  int move_count = movegen_ply(bot->B, is_white, 1, 0, &moves, move_stack, MAX_MOVES);
   int depth;
   if (move_count == 0) return -1; // no legal moves
   for (depth = 1; depth <= bot->depth; ++depth) {
@@ -242,7 +239,7 @@ int find_move(bot *bot, int is_white, int limit) {
       save_snapshot(bot->B, &snap);
       fast_execute(bot->B, moves[i].piece, moves[i].from, moves[i].to, is_white);
       bot->B->white = !is_white;
-      int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 0);
+      int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 1);
       restore_snapshot(bot->B, &snap);
       if ((is_white && eval > lbest) || (!is_white && eval < lbest)) {
         lbest = eval;
@@ -263,7 +260,6 @@ int find_move(bot *bot, int is_white, int limit) {
 #endif
   }
 end_find:
-  free(moves);
 #ifdef DEBUG
   clock_t debug_end = clock();
   double time = (double)(debug_end - debug_start) / CLOCKS_PER_SEC;

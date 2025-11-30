@@ -29,6 +29,7 @@
 #define ROOK_VALUE (5)
 #define QUEEN_VALUE (9)
 #define KING_VALUE (50)
+#define MAX_MOVES (256)
 
 // castling
 #define WKS 0x1  // white king side
@@ -114,6 +115,7 @@ uint64_t queen(uint64_t blockers, int square);
 uint64_t circle(int square);
 int piece_at(board *B, int square);
 int movegen(board *B, int white, move_t **move_list, int check_legal);
+int movegen_ply(board *B, int white, int check_legal, int ply, move_t **out, move_t (*move_stack)[MAX_MOVES], int max_moves);
 board *clone(board *B);
 uint64_t sided_passed_pawns(uint64_t friend, uint64_t opp, int white);
 int value(int piece);
@@ -126,4 +128,5 @@ void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int w
 static inline uint64_t white_attacks(const board *B);
 static inline uint64_t black_attacks(const board *B);
 static inline void add_castles(board *B, int white, move_t **list, int *count, int *max_moves);
+static inline void add_castles_nalloc(board *B, int white, move_t *list, int *count, int max_moves);
 int square_attacker(const board *B_in, int square, int by_black);

@@ -513,6 +513,40 @@ int movegen(board *B, int white, move_t **move_list, int check_legal) {
   return count;
 }
 
+int movegen_ply(board *B, int white, int check_legal, int ply, move_t **out, move_t (*move_stack)[MAX_MOVES], int max_moves) {
+  move_t *list = move_stack[ply];
+  int count = 0;
+  uint64_t pieces = white ? B->whites : B->blacks;
+
+  while (pieces) {
+    int from = __builtin_ctzll(pieces);
+    pieces &= pieces - 1;
+
+    int piece_from = piece_at(B, from);
+    uint64_t from_mask = 1ULL << from;
+    uint64_t to_moves = imove(piece_from, from_mask, B, &white);
+    while (to_moves) {
+      int to = __builtin_ctzll(to_moves);
+      to_moves &= to_moves - 1;
+      if (count >= max_moves)
+        break;
+      if (check_legal) {
+        board_snapshot S;
+        save_snapshot(B, &S);
+        fast_execute(B, piece_from, from, to, white);
+        int illegal = check(B, !white);
+        restore_snapshot(B, &S);
+        if (illegal) continue;
+      }
+      list[count++] = (move_t){piece_from, from, to};
+    }
+  }
+
+  add_castles_nalloc(B, white, list, &count, max_moves);
+  *out = list;
+  return count;
+}
+
 board *clone(board *B) {
   board* clone = (board*)malloc(sizeof(board));
   if (!clone) {
@@ -871,6 +905,62 @@ static inline void add_castles(board *B, int white, move_t **list, int *count, i
         if (!*list) exit(1);
       }
       (*list)[(*count)++] = (move_t){ KING, E8, C8 };
+    }
+  }
+}
+
+static inline void add_castles_nalloc(board *B, int white, move_t *list, int *count, int max_moves) {
+  const uint64_t occ = B->whites | B->blacks;
+
+  if (white) {
+    if (!(B->WHITE[KING] & (1ULL << E1))) return;
+    const uint64_t opp = black_attacks(B);
+
+    // white king side
+    if ((B->castle & WKS) &&
+      (B->WHITE[ROOK] & (1ULL << H1)) &&
+      !(occ & ((1ULL << F1) | (1ULL << G1))) &&
+      !(opp & ((1ULL << E1) | (1ULL << F1) | (1ULL << G1)))) {
+
+      if (*count < max_moves) {
+        list[(*count)++] = (move_t){ KING, E1, G1 };
+      }
+    }
+
+    // white queen side
+    if ((B->castle & WQS) &&
+      (B->WHITE[ROOK] & (1ULL << A1)) &&
+      !(occ & ((1ULL << D1) | (1ULL << C1) | (1ULL << B1))) &&
+      !(opp & ((1ULL << E1) | (1ULL << D1) | (1ULL << C1)))) {
+
+      if (*count < max_moves) {
+        list[(*count)++] = (move_t){ KING, E1, C1 };
+      }
+    }
+  } else {
+    if (!(B->BLACK[KING] & (1ULL << E8))) return;
+    const uint64_t opp = white_attacks(B);
+
+    // black king side
+    if ((B->castle & BKS) &&
+      (B->BLACK[ROOK] & (1ULL << H8)) &&
+      !(occ & ((1ULL << F8) | (1ULL << G8))) &&
+      !(opp & ((1ULL << E8) | (1ULL << F8) | (1ULL << G8)))) {
+
+      if (*count < max_moves) {
+        list[(*count)++] = (move_t){ KING, E8, G8 };
+      }
+    }
+
+    // black queen side
+    if ((B->castle & BQS) &&
+      (B->BLACK[ROOK] & (1ULL << A8)) &&
+      !(occ & ((1ULL << D8) | (1ULL << C8) | (1ULL << B8))) &&
+      !(opp & ((1ULL << E8) | (1ULL << D8) | (1ULL << C8)))) {
+
+      if (*count < max_moves) {
+        list[(*count)++] = (move_t){ KING, E8, C8 };
+      }
     }
   }
 }

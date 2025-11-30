@@ -13,6 +13,7 @@
 #define MAX_PLY (128)
 #define MAX_QPLY (16)
 #define NONE_PIECE (255)
+#define MAX_MOVES (256)
 
 struct bot_header {
     board *B;
@@ -22,6 +23,9 @@ struct bot_header {
 };
 
 typedef struct bot_header bot;
+
+extern move_t move_stack[MAX_PLY][MAX_MOVES];
+extern move_t qmove_stack[MAX_QPLY][MAX_MOVES];
 
 static double deadline;
 static long nodes;
