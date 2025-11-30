@@ -63,7 +63,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   *(info + 1) += (depth == 0) ? 1 : 0;
 #endif
   ++nodes;
-  if (time_over()) return max ? alpha : beta;
+  if (time_over()) return blended_eval(B);
   int old = B->white;
   B->white = max;
   if (depth == 0) {
@@ -121,8 +121,7 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
 #ifdef DEBUG
   *(info + 2) += 1;
 #endif
-  if (time_over())
-    return side ? alpha : beta;
+  if (time_over()) return blended_eval(B);
   
   if (qply >= MAX_QPLY)
     return blended_eval(B);
@@ -208,6 +207,16 @@ int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) {
 }
 
 int find_move(bot *bot, int is_white, int limit) {
+  // movegen for current position
+  /* move_t *movescur;
+  int move_count_cur = movegen_ply(bot->B, is_white, 1, 0, &movescur, move_stack, MAX_MOVES);
+  for (int i = 0; i < move_count_cur; ++i) {
+    char file, rank;
+    ip(movescur[i].from, &file, &rank);
+    char tfile, trank;
+    ip(movescur[i].to, &tfile, &trank);
+    printf("Legal move %d: %c%c to %c%c\n", i, file, rank, tfile, trank);
+  } */
   long *info;
   double start = gtime();
   deadline = start + limit;
@@ -241,9 +250,11 @@ int find_move(bot *bot, int is_white, int limit) {
       bot->B->white = !is_white;
       int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 1);
       restore_snapshot(bot->B, &snap);
+      int packed = moves[i].from * 64 + moves[i].to;
+      // print_move_eval("  Root move", packed, eval);
       if ((is_white && eval > lbest) || (!is_white && eval < lbest)) {
         lbest = eval;
-        lmove = moves[i].from * 64 + moves[i].to;
+        lmove = packed;
       }
       if (time_over()) {
 #ifdef DEBUG
@@ -258,6 +269,8 @@ int find_move(bot *bot, int is_white, int limit) {
 #ifdef DEBUG
     printf("Depth %d ran in %lf seconds, best move: %d, eval: %d\n", depth, gtime() - start, move, best);
 #endif
+    // printf("Depth %d best: ", depth);
+    // print_move_eval("", move, best);
   }
 end_find:
 #ifdef DEBUG

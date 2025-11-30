@@ -2,6 +2,7 @@
 #include "lib/board.h"
 #include <stddef.h>
 #include <string.h>
+#include <stdio.h>
 
 int pi(char file, char rank) {
   if (file < 'a' || file > 'h' || rank < '1' || rank > '8') return -1;
@@ -15,6 +16,15 @@ void ip(int index, char *file, char *rank) {
 
 int index_rank(int rank, int file) {
   return (rank * 8) + file;
+}
+
+void print_move_eval(const char *label, int packed, int eval) {
+  int from = packed / 64;
+  int to = packed % 64;
+  char ff, fr, tf, tr;
+  ip(from, &ff, &fr);
+  ip(to, &tf, &tr);
+  printf("%s: %c%c -> %c%c (from=%d, to=%d), eval=%d\n", label, ff, fr, tf, tr, from, to, eval);
 }
 
 int uci_to_from_to(const char *uci, int *from, int *to) {
