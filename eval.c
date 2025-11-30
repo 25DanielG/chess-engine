@@ -4,8 +4,8 @@
 #include "lib/board.h"
 #include "lib/eval.h"
 
-const int PIECE_VALUES[NUM_PIECES] = {1, 3, 3, 5, 9, 50};
-const int END_VALUES[NUM_PIECES] = {2, 3, 3, 5, 9, 50};
+const int PIECE_VALUES[NUM_PIECES] = {100, 320, 330, 500, 900, 20000};
+const int END_VALUES[NUM_PIECES] = {120, 310, 340, 500, 900, 20000};
 const int TOTAL_PHASE = ((KNIGHT_PHASE * 4) + (BISHOP_PHASE * 4) + (ROOK_PHASE * 4) + (QUEEN_PHASE * 2));
 
 uint64_t wmoves;
