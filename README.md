@@ -9,8 +9,11 @@
 - Quiescence search on captures (`quiesce`)
 - Iterative deepening with hard time cut (`find_move`)
 - Move ordering: MVV-LVA, two killer moves per ply, and history heuristic (`score_moves`)
+- Late move reduction for quiet and late moves
+- Quiescence capture pruning
+- Null-move pruning
 - Pseudo-legal movegen + legality checks + checkmate/stalemate scoring
-- Snapshot-based bitboard for move execution
+- Snapshot-based + undoable bitboard for move execution
 - Magic bitboard for fast sliding move generation
 - Phase evaluation (`blended_eval`, `phase`, `scale`)
 

@@ -9,10 +9,10 @@
 #include "lib/utils.h"
 
 static inline int lsb(uint64_t x) {
-  if (!x) {
+  /* if (!x) {
     fprintf(stderr, "lsb() called with 0!\n");
     abort();
-  }
+  } */
   return __builtin_ctzll(x);
 }
 

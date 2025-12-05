@@ -15,6 +15,17 @@
 #define NONE_PIECE (255)
 #define MAX_MOVES (256)
 
+#define LMR_ENABLED (1)
+#define LMR_MIN_DEPTH (3)
+#define LMR_LATE_MOVE_IDX (3) // reduce from 4th move and on
+#define LMR_REDUCTION (1)
+
+#define NM_ENABLED (1)
+#define NM_MIN_DEPTH (3)
+#define NM_REDUCTION (2) // nm depth reduction
+
+#define CAPPRUNE_ENABLED (1) // quiescence capture pruning
+
 struct bot_header {
   board *B;
   int white;
