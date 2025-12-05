@@ -81,6 +81,16 @@ typedef struct {
   int order; // cached ordering score
 } move_t;
 
+typedef struct {
+  int moved_piece;
+  int from;
+  int to;
+  int captured_piece; // -1 if no capture
+  int captured_square; // usually == to
+  uint8_t prev_castle;
+  uint8_t prev_cc;
+} undo_t;
+
 typedef struct board_header board;
 typedef struct snapshot_header board_snapshot;
 
@@ -88,8 +98,8 @@ static inline int encode_move(move_t m) { return m.from * 64 + m.to; }
 
 board *init_board(void);
 board *preset_board(uint64_t wpawns, uint64_t bpawns, uint64_t wknights, uint64_t bknights, uint64_t wbishops, uint64_t bbishops, uint64_t wrooks, uint64_t brooks, uint64_t wqueens, uint64_t bqueens, uint64_t wkings, uint64_t bkings, uint8_t castling, uint8_t complete);
-uint64_t white_moves(board *B);
-uint64_t black_moves(board *B);
+uint64_t white_moves(const board *B);
+uint64_t black_moves(const board *B);
 uint64_t wp_moves(uint64_t p, uint64_t w, uint64_t b);
 uint64_t bp_moves(uint64_t p, uint64_t w, uint64_t b);
 uint64_t wn_moves(uint64_t p, uint64_t w, uint64_t *jumps);
@@ -102,10 +112,10 @@ uint64_t wq_moves(uint64_t p, uint64_t w, uint64_t b);
 uint64_t bq_moves(uint64_t p, uint64_t w, uint64_t b);
 uint64_t wk_moves(uint64_t p, uint64_t w);
 uint64_t bk_moves(uint64_t p, uint64_t b);
-uint64_t whites(board *B);
-uint64_t blacks(board *B);
-uint64_t empty(board *B);
-void print_board(board *B);
+uint64_t whites(const board *B);
+uint64_t blacks(const board *B);
+void print_board(const board *B);
+void print_snapshot(const char *label, const board_snapshot *S);
 void binary_print(uint64_t N);
 void free_board(board *B);
 void init_jump_table(uint64_t *jumps);
@@ -113,14 +123,18 @@ uint64_t slide(uint64_t blocks, int square);
 uint64_t translate(uint64_t blockers, int square);
 uint64_t queen(uint64_t blockers, int square);
 uint64_t circle(int square);
-int piece_at(board *B, int square);
+int piece_at(const board *B, int square);
 int movegen(board *B, int white, move_t **move_list, int check_legal);
 int movegen_ply(board *B, int white, int check_legal, int ply, move_t **out, move_t (*move_stack)[MAX_MOVES], int max_moves);
 board *clone(board *B);
 uint64_t sided_passed_pawns(uint64_t friend, uint64_t opp, int white);
 int value(int piece);
 void fast_execute(board *B, int piece, int from, int to, int white);
+void assert_board(const board *B);
+void make_move(board *B, const move_t *m, int white, undo_t *u);
+void unmake_move(board *B, const move_t *m, int white, const undo_t *u);
 uint64_t hash_board(const board *B);
+uint64_t hash_snapshot(const board_snapshot* S);
 void save_snapshot(const board *B, board_snapshot *S);
 void restore_snapshot(board *B, const board_snapshot *S);
 int check(const board *B, int side);

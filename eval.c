@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "lib/board.h"
 #include "lib/eval.h"
+#include "lib/utils.h"
 
 const int PIECE_VALUES[NUM_PIECES] = {100, 320, 330, 500, 900, 20000};
 const int END_VALUES[NUM_PIECES] = {120, 310, 340, 500, 900, 20000};
@@ -11,7 +12,7 @@ const int TOTAL_PHASE = ((KNIGHT_PHASE * 4) + (BISHOP_PHASE * 4) + (ROOK_PHASE *
 uint64_t wmoves;
 uint64_t bmoves;
 
-int tapered(board *B) {
+int tapered(const board *B) {
   wmoves = white_moves(B);
   bmoves = black_moves(B);
 
@@ -23,7 +24,7 @@ int tapered(board *B) {
   return v;
 }
 
-int mat_eval(board *B) {
+int mat_eval(const board *B) {
   int score = PIECE_VALUES[PAWN] * (__builtin_popcountll(B->WHITE[PAWN]) - __builtin_popcountll(B->BLACK[PAWN]));
   score += PIECE_VALUES[KNIGHT] * (__builtin_popcountll(B->WHITE[KNIGHT]) - __builtin_popcountll(B->BLACK[KNIGHT]));
   score += PIECE_VALUES[BISHOP] * (__builtin_popcountll(B->WHITE[BISHOP]) - __builtin_popcountll(B->BLACK[BISHOP]));
@@ -33,14 +34,14 @@ int mat_eval(board *B) {
   return score;
 }
 
-int center_control(board *B) {
+int center_control(const board *B) {
   const uint64_t CENTER = (FILE_D | FILE_E) & (RANK_4 | RANK_5);
   uint64_t wcont = B->whites & CENTER;
   uint64_t bcont = B->blacks & CENTER;
   return 2 * (__builtin_popcountll(wcont) - __builtin_popcountll(bcont));
 }
 
-int king_safe(board *B) {
+int king_safe(const board *B) {
   uint64_t wking = wk_moves(B->WHITE[KING], B->whites);
   uint64_t bking = bk_moves(B->BLACK[KING], B->blacks);
   int wsafe = __builtin_popcountll(wking & bmoves);
@@ -48,17 +49,17 @@ int king_safe(board *B) {
   return (bsafe - wsafe);
 }
 
-int mobility(board *B) {
+int mobility(const board *B) {
   int wmobile = __builtin_popcountll(wmoves);
   int bmobile = __builtin_popcountll(bmoves);
   return (wmobile - bmobile) / 2;
 }
 
-int mid_eval(board *B) {
+int mid_eval(const board *B) {
   return mat_eval(B) + center_control(B) + king_safe(B) + mobility(B);
 }
 
-int phase(board *B) {
+int phase(const board *B) {
   int phase = 0;
   phase += __builtin_popcountll(B->WHITE[KNIGHT]) * KNIGHT_PHASE;
   phase += __builtin_popcountll(B->BLACK[KNIGHT]) * KNIGHT_PHASE;
@@ -74,7 +75,7 @@ int phase(board *B) {
   return (phase * 128) / TOTAL_PHASE;
 }
 
-int scale(board *B, int eg_score) {
+int scale(const board *B, int eg_score) {
   int no_wpawns = (__builtin_popcountll(B->WHITE[PAWN]) == 0);
   int no_bpawns = (__builtin_popcountll(B->BLACK[PAWN]) == 0);
   if (no_wpawns || no_bpawns) return HALF_SCALE;
@@ -84,7 +85,7 @@ int scale(board *B, int eg_score) {
   return MOD_SCALE;
 }
 
-int end_mat_eval(board *B) {
+int end_mat_eval(const board *B) {
   int score = END_VALUES[PAWN] * (__builtin_popcountll(B->WHITE[PAWN]) - __builtin_popcountll(B->BLACK[PAWN]));
   score += END_VALUES[KNIGHT] * (__builtin_popcountll(B->WHITE[KNIGHT]) - __builtin_popcountll(B->BLACK[KNIGHT]));
   score += END_VALUES[BISHOP] * (__builtin_popcountll(B->WHITE[BISHOP]) - __builtin_popcountll(B->BLACK[BISHOP]));
@@ -94,7 +95,7 @@ int end_mat_eval(board *B) {
   return score;
 }
 
-int king_activity(board *B) {
+int king_activity(const board *B) {
   uint64_t mid_ranks = RANK_3 | RANK_4 | RANK_5 | RANK_6;
   int wking = (B->WHITE[KING] & mid_ranks) != 0;
   int bking = (B->BLACK[KING] & mid_ranks) != 0;
@@ -103,7 +104,7 @@ int king_activity(board *B) {
   return (w - b);
 }
 
-int pawn_structure(board *B) {
+int pawn_structure(const board *B) {
   const uint64_t WPROMOTE = RANK_7;
   const uint64_t BPROMOTE = RANK_2;
   uint64_t wp = B->WHITE[PAWN] & WPROMOTE;
@@ -111,7 +112,7 @@ int pawn_structure(board *B) {
   return ((__builtin_popcountll(wp) - __builtin_popcountll(bp)) * (PAWN_PROMOTE));
 }
 
-int passed_pawns(board *B) {
+int passed_pawns(const board *B) {
   uint64_t wp = B->WHITE[PAWN];
   uint64_t bp = B->BLACK[PAWN];
   uint64_t wpass = sided_passed_pawns(wp, bp, 1);
@@ -119,7 +120,7 @@ int passed_pawns(board *B) {
   return (PAWN_PASSED * (__builtin_popcountll(wpass) - __builtin_popcountll(bpass)));
 }
 
-int development(board *B) {
+int development(const board *B) {
   int score = 0;
   uint64_t wminors = B->WHITE[KNIGHT] | B->WHITE[BISHOP]; // white minor pieces
   int w_undeveloped = __builtin_popcountll(wminors & RANK_1);
@@ -139,7 +140,7 @@ int castle_eval(const board *B) {
   return score;
 }
 
-int end_eval(board *B) {
+int end_eval(const board *B) {
   return end_mat_eval(B) + king_activity(B) + pawn_structure(B) + passed_pawns(B);
 }
 
@@ -165,7 +166,7 @@ void init_pesto_tables(void) {
   }
 }
 
-void pesto_terms(board *B, int *mg, int *eg, int *p24) {
+void pesto_terms(const board *B, int *mg, int *eg, int *p24) {
   int mgW = 0, mgB = 0;
   int egW = 0, egB = 0;
   int gp = 0;
@@ -197,7 +198,7 @@ void pesto_terms(board *B, int *mg, int *eg, int *p24) {
   *p24 = gp;
 }
 
-int blended_eval(board *B) {
+int blended_eval(const board *B) {
   wmoves = white_moves(B);
   bmoves = black_moves(B);
 

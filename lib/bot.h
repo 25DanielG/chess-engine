@@ -16,10 +16,10 @@
 #define MAX_MOVES (256)
 
 struct bot_header {
-    board *B;
-    int white;
-    int depth;
-    int limit;
+  board *B;
+  int white;
+  int depth;
+  int limit;
 };
 
 typedef struct bot_header bot;
@@ -46,7 +46,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
 int quiesce(board *B, int side, int alpha, int beta, long *info, int qply);
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply);
 int find_move(bot *bot, int is_white, int limit);
-static inline int is_capture(board *B, int side_to_move, const move_t *m);
-static inline int victim_square(board *B, int side_to_move, int sq);
+static inline int is_capture(const board *B, int side_to_move, const move_t *m);
+static inline int victim_square(const board *B, int side_to_move, int sq);
 static void move_sort(move_t *mv, int n);
-static void score_moves(board *B, move_t *mv, int n, int side_to_move, int ply);
+static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply);

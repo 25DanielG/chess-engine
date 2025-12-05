@@ -4,3 +4,4 @@ a.out
 *.dSYM
 chess
 .DS_Store
+.editorconfig

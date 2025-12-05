@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <limits.h>
 #include <time.h>
 #include "lib/bot.h"
@@ -63,6 +64,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   *(info + 1) += (depth == 0) ? 1 : 0;
 #endif
   ++nodes;
+  if (ply >= MAX_PLY) return blended_eval(B);
   if (time_over()) return blended_eval(B);
   int old = B->white;
   B->white = max;
@@ -89,11 +91,10 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   score_moves(B, moves, move_count, max, ply);
   int i;
   for (i = 0; i < move_count; ++i) {
-    board_snapshot snap;
-    save_snapshot(B, &snap);
-    int mover = max;
-    fast_execute(B, moves[i].piece, moves[i].from, moves[i].to, max);
+    undo_t u;
+    make_move(B, &moves[i], max, &u);
     int eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
+    unmake_move(B, &moves[i], max, &u);
     if (max) {
       best = (eval > best) ? eval : best;
       alpha = (eval > alpha) ? eval : alpha;
@@ -101,7 +102,6 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       best = (eval < best) ? eval : best;
       beta = (eval < beta) ? eval : beta;
     }
-    restore_snapshot(B, &snap);
     if (beta <= alpha) {
       if (!is_capture(B, max, &moves[i])) {
         if (!equals(killer1[ply], moves[i])) { // update killer
@@ -117,12 +117,12 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   return best;
 }
 
-int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
+int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
 #ifdef DEBUG
-  *(info + 2) += 1;
+  * (info + 2) += 1;
 #endif
   if (time_over()) return blended_eval(B);
-  
+
   if (qply >= MAX_QPLY)
     return blended_eval(B);
 
@@ -136,30 +136,29 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
     if (stand < beta)   beta = stand;
   }
 
-  static move_t caps[MAX_MOVES];
+  move_t caps[MAX_MOVES];
   int n = 0;
-  move_t *mv;
+  move_t* mv;
   int mcount = movegen_ply(B, side, 0, qply, &mv, qmove_stack, MAX_MOVES); // pseudo legal
 
   // filter captures
   for (int i = 0; i < mcount; ++i) {
     uint64_t to_mask = 1ULL << mv[i].to;
-    int is_cap = side ? ((B->blacks & to_mask)!=0) : ((B->whites & to_mask)!=0);
+    int is_cap = side ? ((B->blacks & to_mask) != 0) : ((B->whites & to_mask) != 0);
     if (is_cap) caps[n++] = mv[i];
     if (n == MAX_MOVES) break;
   }
 
   for (int i = 0; i < n; ++i) {
-    board_snapshot S; save_snapshot(B, &S);
-    int next = side;
-    fast_execute(B, caps[i].piece, caps[i].from, caps[i].to, next);
+    undo_t u;
+    make_move(B, &caps[i], side, &u);
+
     if (check(B, !side)) {  // illegal
-      restore_snapshot(B, &S);
+      unmake_move(B, &caps[i], side, &u);
       continue;
     }
-
     int score = quiesce(B, !side, alpha, beta, info, qply + 1);
-    restore_snapshot(B, &S);
+    unmake_move(B, &caps[i], side, &u);
 
     if (side) {
       if (score >= beta) return beta;
@@ -174,6 +173,8 @@ int quiesce(board *B, int side, int alpha, int beta, long *info, int qply) {
 }
 
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) { // assumes B->white == side and side is in check
+  if (ply >= MAX_PLY) return blended_eval(B);
+
   move_t *moves;
   int move_count = movegen_ply(B, side, 1, ply, &moves, move_stack, MAX_MOVES);  // legal moves only
 
@@ -185,12 +186,10 @@ int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) {
   int best = side ? INT32_MIN : INT32_MAX;
 
   for (int i = 0; i < move_count; ++i) {
-    board_snapshot snap;
-    save_snapshot(B, &snap);
-    fast_execute(B, moves[i].piece, moves[i].from, moves[i].to, side);
-
+    undo_t u;
+    make_move(B, &moves[i], side, &u);
     int child = minimax(B, 0, !side, alpha, beta, info, ply + 1);
-    restore_snapshot(B, &snap);
+    unmake_move(B, &moves[i], side, &u);
 
     if (side) {
       if (child > best) best = child;
@@ -207,16 +206,6 @@ int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) {
 }
 
 int find_move(bot *bot, int is_white, int limit) {
-  // movegen for current position
-  /* move_t *movescur;
-  int move_count_cur = movegen_ply(bot->B, is_white, 1, 0, &movescur, move_stack, MAX_MOVES);
-  for (int i = 0; i < move_count_cur; ++i) {
-    char file, rank;
-    ip(movescur[i].from, &file, &rank);
-    char tfile, trank;
-    ip(movescur[i].to, &tfile, &trank);
-    printf("Legal move %d: %c%c to %c%c\n", i, file, rank, tfile, trank);
-  } */
   long *info;
   double start = gtime();
   deadline = start + limit;
@@ -284,20 +273,16 @@ end_find:
   return move;
 }
 
-static inline int is_capture(board *B, int side_to_move, const move_t *m) {
+static inline int is_capture(const board *B, int side_to_move, const move_t *m) {
   uint64_t to_mask = 1ULL << m->to;
   return side_to_move ? (B->blacks & to_mask) != 0 : (B->whites & to_mask) != 0;
 }
 
-static inline int victim_square(board *B, int side_to_move, int sq) {
+static inline int victim_square(const board *B, int side_to_move, int sq) {
   uint64_t mask = 1ULL << sq;
   uint64_t *opp = side_to_move ? B->BLACK : B->WHITE;
-  unsigned code = ((opp[PAWN] >> sq) & 1u) | 
-                  (((opp[KNIGHT] >> sq) & 1u) << 1) | 
-                  (((opp[BISHOP] >> sq) & 1u) << 2) | 
-                  (((opp[ROOK] >> sq) & 1u) << 3) | 
-                  (((opp[QUEEN] >> sq) & 1u) << 4) | 
-                  (((opp[KING] >> sq) & 1u) << 5);
+  unsigned code = ((opp[PAWN] >> sq) & 1u) | (((opp[KNIGHT] >> sq) & 1u) << 1) | (((opp[BISHOP] >> sq) & 1u) << 2) | 
+                  (((opp[ROOK] >> sq) & 1u) << 3) | (((opp[QUEEN] >> sq) & 1u) << 4) | (((opp[KING] >> sq) & 1u) << 5);
   return PIECE_PT[code];
 }
 
@@ -313,7 +298,7 @@ static void move_sort(move_t *mv, int n) {
   }
 }
 
-static void score_moves(board *B, move_t *mv, int n, int side_to_move, int ply) {
+static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply) {
   for (int i = 0; i < n; ++i) {
     int score = 0;
     if (is_capture(B, side_to_move, &mv[i])) { // mvvlva

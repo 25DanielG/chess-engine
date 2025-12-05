@@ -6,6 +6,15 @@
 #include "lib/board.h"
 #include "lib/manager.h"
 #include "lib/magic.h"
+#include "lib/utils.h"
+
+static inline int lsb(uint64_t x) {
+  if (!x) {
+    fprintf(stderr, "lsb() called with 0!\n");
+    abort();
+  }
+  return __builtin_ctzll(x);
+}
 
 board *init_board(void) {
   board *B = malloc(sizeof(board));
@@ -99,11 +108,11 @@ board *preset_board(uint64_t wpawns, uint64_t bpawns, uint64_t wknights, uint64_
   return B;
 }
 
-uint64_t white_moves(board *B) {
+uint64_t white_moves(const board *B) {
   return wp_moves(B->WHITE[PAWN], B->whites, B->blacks) | wn_moves(B->WHITE[KNIGHT], B->whites, B->jumps) | wb_moves(B->WHITE[BISHOP], B->whites, B->blacks) | wr_moves(B->WHITE[ROOK], B->whites, B->blacks) | wq_moves(B->WHITE[QUEEN], B->whites, B->blacks) | wk_moves(B->WHITE[KING], B->whites);
 }
 
-uint64_t black_moves(board *B) {
+uint64_t black_moves(const board *B) {
   return bp_moves(B->BLACK[PAWN], B->whites, B->blacks) | bn_moves(B->BLACK[KNIGHT], B->blacks, B->jumps) | bb_moves(B->BLACK[BISHOP], B->whites, B->blacks) | br_moves(B->BLACK[ROOK], B->whites, B->blacks) | bq_moves(B->BLACK[QUEEN], B->whites, B->blacks) | bk_moves(B->BLACK[KING], B->blacks);
 }
 
@@ -134,7 +143,7 @@ uint64_t bp_moves(uint64_t p, uint64_t w, uint64_t b) {
 uint64_t wn_moves(uint64_t p, uint64_t w, uint64_t *jumps) {
   uint64_t legals = 0;
   while (p) {
-    int pos = __builtin_ctzll(p);
+    int pos = lsb(p);
     p &= p - 1;
     legals |= jumps[pos] & ~w;
   }
@@ -144,52 +153,30 @@ uint64_t wn_moves(uint64_t p, uint64_t w, uint64_t *jumps) {
 uint64_t bn_moves(uint64_t p, uint64_t b, uint64_t *jumps) {
   uint64_t legals = 0;
   while (p) {
-      int pos = __builtin_ctzll(p);
-      p &= p - 1;
-      legals |= jumps[pos] & ~b;
+    int pos = lsb(p);
+    p &= p - 1;
+    legals |= jumps[pos] & ~b;
   }
   return legals;
 }
-
-// uint64_t wb_moves(uint64_t p, uint64_t w, uint64_t b) {
-//   uint64_t legals = 0;
-//   uint64_t blockers = w | b;
-//   while (p) {
-//     int pos = __builtin_ctzll(p);
-//     p &= p - 1;
-//     legals |= slide(blockers, pos) & ~w;
-//   }
-//   return legals;
-// }
 
 uint64_t wb_moves(uint64_t p, uint64_t w, uint64_t b) {
   uint64_t legals = 0ULL;
   const uint64_t occ = w | b;
   while (p) {
-    int sq = __builtin_ctzll(p);
+    int sq = lsb(p);
     p &= p - 1;
     uint64_t attacks = generate_bishop_attacks(sq, occ);
     legals |= attacks & ~w;
   }
   return legals;
 }
-
-// uint64_t bb_moves(uint64_t p, uint64_t w, uint64_t b) {
-//   uint64_t legals = 0;
-//   uint64_t blockers = w | b;
-//   while (p) {
-//     int pos = __builtin_ctzll(p);
-//     p &= p - 1;
-//     legals |= slide(blockers, pos) & ~b;
-//   }
-//   return legals;
-// }
 
 uint64_t bb_moves(uint64_t p, uint64_t w, uint64_t b) {
   uint64_t legals = 0ULL;
   const uint64_t occ = w | b;
   while (p) {
-    int sq = __builtin_ctzll(p);
+    int sq = lsb(p);
     p &= p - 1;
     uint64_t attacks = generate_bishop_attacks(sq, occ);
     legals |= attacks & ~b;
@@ -197,22 +184,11 @@ uint64_t bb_moves(uint64_t p, uint64_t w, uint64_t b) {
   return legals;
 }
 
-// uint64_t wr_moves(uint64_t p, uint64_t w, uint64_t b) {
-//   uint64_t legals = 0;
-//   uint64_t blockers = w | b;
-//   while (p) {
-//     int pos = __builtin_ctzll(p);
-//     p &= p - 1;
-//     legals |= translate(blockers, pos) & ~w;
-//   }
-//   return legals;
-// }
-
 uint64_t wr_moves(uint64_t p, uint64_t w, uint64_t b) {
   uint64_t legals = 0ULL;
   const uint64_t occ = w | b;
   while (p) {
-    int sq = __builtin_ctzll(p);
+    int sq = lsb(p);
     p &= p - 1;
     uint64_t attacks = generate_rook_attacks(sq, occ);
     legals |= attacks & ~w;
@@ -220,22 +196,11 @@ uint64_t wr_moves(uint64_t p, uint64_t w, uint64_t b) {
   return legals;
 }
 
-// uint64_t br_moves(uint64_t p, uint64_t w, uint64_t b) {
-//   uint64_t legals = 0;
-//   uint64_t blockers = w | b;
-//   while (p) {
-//     int pos = __builtin_ctzll(p);
-//     p &= p - 1;
-//     legals |= translate(blockers, pos) & ~b;
-//   }
-//   return legals;
-// }
-
 uint64_t br_moves(uint64_t p, uint64_t w, uint64_t b) {
   uint64_t legals = 0ULL;
   const uint64_t occ = w | b;
   while (p) {
-    int sq = __builtin_ctzll(p);
+    int sq = lsb(p);
     p &= p - 1;
     uint64_t attacks = generate_rook_attacks(sq, occ);
     legals |= attacks & ~b;
@@ -243,22 +208,11 @@ uint64_t br_moves(uint64_t p, uint64_t w, uint64_t b) {
   return legals;
 }
 
-// uint64_t wq_moves(uint64_t p, uint64_t w, uint64_t b) {
-//   uint64_t legals = 0;
-//   uint64_t blockers = w | b;
-//   while (p) {
-//     int pos = __builtin_ctzll(p);
-//     p &= p - 1;
-//     legals |= queen(blockers, pos) & ~w;
-//   }
-//   return legals;
-// }
-
 uint64_t wq_moves(uint64_t p, uint64_t w, uint64_t b) {
   uint64_t legals = 0ULL;
   const uint64_t occ = w | b;
   while (p) {
-    int sq = __builtin_ctzll(p);
+    int sq = lsb(p);
     p &= p - 1;
     uint64_t attacks = generate_rook_attacks(sq, occ) | generate_bishop_attacks(sq, occ);
     legals |= attacks & ~w;
@@ -266,22 +220,11 @@ uint64_t wq_moves(uint64_t p, uint64_t w, uint64_t b) {
   return legals;
 }
 
-// uint64_t bq_moves(uint64_t p, uint64_t w, uint64_t b) {
-//   uint64_t legals = 0;
-//   uint64_t blockers = w | b;
-//   while (p) {
-//     int pos = __builtin_ctzll(p);
-//     p &= p - 1;
-//     legals |= queen(blockers, pos) & ~b;
-//   }
-//   return legals;
-// }
-
 uint64_t bq_moves(uint64_t p, uint64_t w, uint64_t b) {
   uint64_t legals = 0ULL;
   const uint64_t occ = w | b;
   while (p) {
-    int sq = __builtin_ctzll(p);
+    int sq = lsb(p);
     p &= p - 1;
     uint64_t attacks = generate_rook_attacks(sq, occ) | generate_bishop_attacks(sq, occ);
     legals |= attacks & ~b;
@@ -290,31 +233,56 @@ uint64_t bq_moves(uint64_t p, uint64_t w, uint64_t b) {
 }
 
 uint64_t wk_moves(uint64_t p, uint64_t w) {
-  int pos = __builtin_ctzll(p);
+  int pos = lsb(p);
   uint64_t moves = circle(pos);
   moves &= ~w;
   return moves;
 }
 
 uint64_t bk_moves(uint64_t p, uint64_t b) {
-  int pos = __builtin_ctzll(p);
+  int pos = lsb(p);
   uint64_t moves = circle(pos);
   moves &= ~b;
   return moves;
 }
 
 
-uint64_t whites(board *B) {
+uint64_t whites(const board *B) {
   return B->WHITE[PAWN] | B->WHITE[KNIGHT] | B->WHITE[BISHOP] | B->WHITE[ROOK] | B->WHITE[QUEEN] | B->WHITE[KING];
 }
 
-uint64_t blacks(board *B) {
+uint64_t blacks(const board *B) {
   return B->BLACK[PAWN] | B->BLACK[KNIGHT] | B->BLACK[BISHOP] | B->BLACK[ROOK] | B->BLACK[QUEEN] | B->BLACK[KING];
 }
 
-void print_board(board *B) {
+void print_board(const board *B) {
   uint64_t board = B->whites | B->blacks;
   binary_print(board);
+}
+
+void print_snapshot(const char *label, const board_snapshot *S) {
+  const char *piece_names[NUM_PIECES] = {
+    "PAWN", "KNIGHT", "BISHOP", "ROOK", "QUEEN", "KING"
+  };
+
+  printf("==== Snapshot: %s ====\n", label);
+  printf("Side to move (white?): %d\n", S->white);
+  printf("Castling rights: 0x%02x\n", S->castle);
+  printf("CC flags : 0x%02x\n", S->cc);
+  printf("Whites bb : 0x%016llx\n", (unsigned long long)S->whites);
+  printf("Blacks bb : 0x%016llx\n", (unsigned long long)S->blacks);
+
+  for (int p = 0; p < NUM_PIECES; ++p) {
+    printf("WHITE[%s]: 0x%016llx\n", piece_names[p], (unsigned long long)S->WHITE[p]);
+  }
+  for (int p = 0; p < NUM_PIECES; ++p) {
+    printf("BLACK[%s]: 0x%016llx\n", piece_names[p], (unsigned long long)S->BLACK[p]);
+  }
+
+  printf("Board (whites | blacks):\n");
+  uint64_t all = S->whites | S->blacks;
+  binary_print(all);
+  printf("==== End Snapshot: %s ====\n", label);
 }
 
 void binary_print(uint64_t N) {
@@ -471,36 +439,45 @@ uint64_t circle(int square) {
   return moves;
 }
 
-int piece_at(board *B, int square) {
+int piece_at(const board *B, int square) {
   int p;
   for (p = 0; p < NUM_PIECES; ++p)
     if ((B->WHITE[p] & (1ULL << square)) || (B->BLACK[p] & (1ULL << square))) return p;
   return -1;
 }
 
-int movegen(board *B, int white, move_t **move_list, int check_legal) {
+int movegen(board* B, int white, move_t** move_list, int check_legal) {
   int max_moves = 256;
   *move_list = malloc(max_moves * sizeof(move_t));
   if (!*move_list) exit(1);
   int count = 0;
   uint64_t pieces = white ? B->whites : B->blacks;
   while (pieces) {
-    int from = __builtin_ctzll(pieces);
+    int from = lsb(pieces);
     pieces &= pieces - 1;
-    int piece_from = piece_at(B, from);
-    uint64_t to_moves = imove(piece_at(B, from), (1ULL << from), B, &white);
+
+    int piece = piece_at(B, from);
+    uint64_t from_mask = 1ULL << from;
+    uint64_t to_moves = imove(piece, from_mask, B, &white);
     while (to_moves) {
-      int to = __builtin_ctzll(to_moves);
+      int to = lsb(to_moves);
       to_moves &= to_moves - 1;
+
+      undo_t u;
+      int legal = 1;
+
       if (check_legal) {
-        board_snapshot S;
-        save_snapshot(B, &S);
-        fast_execute(B, piece_from, from, to, white);
-        int illegal = check(B, !white);
-        restore_snapshot(B, &S);
-        if (illegal) continue;
+        make_move(B, &(move_t){piece, from, to}, white, & u);
+        if (check(B, !white)) {
+          legal = 0; // king in check
+        }
+        unmake_move(B, &(move_t){piece, from, to}, white, & u);
       }
-      (*move_list)[count++] = (move_t){piece_from, from, to};
+
+      if (!legal) continue;
+
+      (*move_list)[count++] = (move_t){ piece, from, to };
+
       if (count >= max_moves) {
         max_moves *= 2;
         *move_list = realloc(*move_list, max_moves * sizeof(move_t));
@@ -513,32 +490,35 @@ int movegen(board *B, int white, move_t **move_list, int check_legal) {
   return count;
 }
 
-int movegen_ply(board *B, int white, int check_legal, int ply, move_t **out, move_t (*move_stack)[MAX_MOVES], int max_moves) {
-  move_t *list = move_stack[ply];
+int movegen_ply(board* B, int white, int check_legal, int ply, move_t** out, move_t(*move_stack)[MAX_MOVES], int max_moves) {
+  move_t* list = move_stack[ply];
   int count = 0;
   uint64_t pieces = white ? B->whites : B->blacks;
 
   while (pieces) {
-    int from = __builtin_ctzll(pieces);
+    int from = lsb(pieces);
     pieces &= pieces - 1;
 
-    int piece_from = piece_at(B, from);
+    int piece = piece_at(B, from);
     uint64_t from_mask = 1ULL << from;
-    uint64_t to_moves = imove(piece_from, from_mask, B, &white);
-    while (to_moves) {
-      int to = __builtin_ctzll(to_moves);
+    uint64_t to_moves = imove(piece, from_mask, B, &white);
+
+    while (to_moves && count < max_moves) {
+      int to = lsb(to_moves);
       to_moves &= to_moves - 1;
-      if (count >= max_moves)
-        break;
+
+      undo_t u;
+      int legal = 1;
       if (check_legal) {
-        board_snapshot S;
-        save_snapshot(B, &S);
-        fast_execute(B, piece_from, from, to, white);
-        int illegal = check(B, !white);
-        restore_snapshot(B, &S);
-        if (illegal) continue;
+        make_move(B, &(move_t){piece, from, to}, white, & u);
+        if (check(B, !white))
+          legal = 0;
+        unmake_move(B, &(move_t){piece, from, to}, white, & u);
       }
-      list[count++] = (move_t){piece_from, from, to};
+
+      if (!legal) continue;
+
+      list[count++] = (move_t){ piece, from, to };
     }
   }
 
@@ -608,77 +588,84 @@ int value(int piece) {
   }
 }
 
-void fast_execute(board *B, int piece, int from, int to, int white) {
+void fast_execute(board* B, int piece, int from, int to, int white) {
   uint64_t from_mask = 1ULL << from;
   uint64_t to_mask = 1ULL << to;
-  uint64_t home = white ? B->whites : B->blacks;
-  uint64_t enemy = white ? B->blacks : B->whites;
 
-  // clear castling rights king/rook move
-  if (white) {
-    if (piece == KING) B->castle &= ~(WKS | WQS);
+  if (white) { // castle rights
+    if (piece == KING) {
+      B->castle &= ~(WKS | WQS);
+    }
     else if (piece == ROOK) {
       if (from == H1) B->castle &= ~WKS;
       else if (from == A1) B->castle &= ~WQS;
     }
   } else {
-    if (piece == KING) B->castle &= ~(BKS | BQS);
+    if (piece == KING) {
+      B->castle &= ~(BKS | BQS);
+    }
     else if (piece == ROOK) {
       if (from == H8) B->castle &= ~BKS;
       else if (from == A8) B->castle &= ~BQS;
     }
   }
 
-  // clear castling rights if rook is captured on its square
   if (white) {
-    // white moved, black piece on to?
+    // white moved, is black rook captured
     if (B->BLACK[ROOK] & to_mask) {
       if (to == H8) B->castle &= ~BKS;
       else if (to == A8) B->castle &= ~BQS;
     }
-  } else {
-    // black moved, white piece on to?
+  }
+  else {
+    // black moved, is white rook captured
     if (B->WHITE[ROOK] & to_mask) {
       if (to == H1) B->castle &= ~WKS;
       else if (to == A1) B->castle &= ~WQS;
     }
   }
 
-  int i;
   if (white) {
-    B->WHITE[piece] ^= from_mask;
-    B->WHITE[piece] |= to_mask;
+    B->WHITE[piece] &= ~from_mask;
   } else {
-    B->BLACK[piece] ^= from_mask;
-    B->BLACK[piece] |= to_mask;
+    B->BLACK[piece] &= ~from_mask;
   }
-  for (i = 0; i < NUM_PIECES; i++) {
-    if ((B->WHITE[i] & to_mask) || (B->BLACK[i] & to_mask)) {
-      if (white) B->BLACK[i] &= (~to_mask);
-      else B->WHITE[i] &= (~to_mask);
+
+  if (white) {
+    for (int i = 0; i < NUM_PIECES; ++i) {
+      B->BLACK[i] &= ~to_mask;
+    }
+  } else {
+    for (int i = 0; i < NUM_PIECES; ++i) {
+      B->WHITE[i] &= ~to_mask;
     }
   }
 
-  // move rook if castle
-  if (piece == KING && (from/8 == to/8) && (abs(to - from) == 2)) {
+  if (white) {
+    B->WHITE[piece] |= to_mask;
+  } else {
+    B->BLACK[piece] |= to_mask;
+  }
+
+  if (piece == KING && (from / 8 == to / 8) && (abs(to - from) == 2)) {
     if (white) {
-      if (to == G1) { // WKS: h1 to f1
+      if (to == G1) { // white king side h1 -> f1
         B->cc |= WKS;
-        B->WHITE[ROOK] ^= (1ULL << H1);
+        B->WHITE[ROOK] &= ~(1ULL << H1);
         B->WHITE[ROOK] |= (1ULL << F1);
-      } else { // WQS: a1 to d1
+      } else { // white queen side a1 -> d1
         B->cc |= WQS;
-        B->WHITE[ROOK] ^= (1ULL << A1);
+        B->WHITE[ROOK] &= ~(1ULL << A1);
         B->WHITE[ROOK] |= (1ULL << D1);
       }
     } else {
-      if (to == G8) { // BKS: h8 to f8
+      if (to == G8) { // black king side h8 -> f8
         B->cc |= BKS;
-        B->BLACK[ROOK] ^= (1ULL << H8);
+        B->BLACK[ROOK] &= ~(1ULL << H8);
         B->BLACK[ROOK] |= (1ULL << F8);
-      } else { // BQS: a8 to d8
+      } else { // black queen side a8 -> d8
         B->cc |= BQS;
-        B->BLACK[ROOK] ^= (1ULL << A8);
+        B->BLACK[ROOK] &= ~(1ULL << A8);
         B->BLACK[ROOK] |= (1ULL << D8);
       }
     }
@@ -686,18 +673,124 @@ void fast_execute(board *B, int piece, int from, int to, int white) {
 
   B->whites = whites(B);
   B->blacks = blacks(B);
-  return;
 }
 
-uint64_t hash_board(const board *B) {
-  uint64_t hash = 0;
-  int i;
-  for (i = 0; i < 6; ++i) {
-    hash ^= B->WHITE[i] ^ (B->BLACK[i] << 1) ^ (B->jumps[i] << 2);
+void make_move(board* B, const move_t* m, int side, undo_t* u) {
+  uint64_t from_mask = 1ULL << m->from;
+  uint64_t to_mask   = 1ULL << m->to;
+
+  u->moved_piece = m->piece;
+  u->from = m->from;
+  u->to = m->to;
+
+  u->prev_castle = B->castle;
+  u->prev_cc = B->cc;
+
+  u->captured_piece = -1;
+  u->captured_square = m->to;
+
+  if (side) { // white moved
+    for (int i = 0; i < NUM_PIECES; ++i) {
+      if (B->BLACK[i] & to_mask) {
+        u->captured_piece = i;
+        break;
+      }
+    }
+  } else { // black moved
+    for (int i = 0; i < NUM_PIECES; ++i) {
+      if (B->WHITE[i] & to_mask) {
+        u->captured_piece = i;
+        break;
+      }
+    }
   }
-  hash ^= B->whites << 3;
-  hash ^= B->blacks << 4;
-  hash ^= ((uint64_t)B->white) << 5;
+
+  fast_execute(B, m->piece, m->from, m->to, side);
+}
+
+void unmake_move(board* B, const move_t* m, int side, const undo_t* u) {
+  uint64_t from_mask = 1ULL << u->from;
+  uint64_t to_mask   = 1ULL << u->to;
+
+  B->castle = u->prev_castle;
+  B->cc = u->prev_cc;
+
+  if (side) { // white moved
+    B->WHITE[u->moved_piece] &= ~to_mask;
+    B->WHITE[u->moved_piece] |= from_mask;
+
+    if (u->captured_piece != -1) {
+      B->BLACK[u->captured_piece] |= (1ULL << u->captured_square);
+    }
+  } else { // black moved
+    B->BLACK[u->moved_piece] &= ~to_mask;
+    B->BLACK[u->moved_piece] |= from_mask;
+
+    if (u->captured_piece != -1) {
+      B->WHITE[u->captured_piece] |= (1ULL << u->captured_square);
+    }
+  }
+
+  if (u->moved_piece == KING &&
+    (u->from / 8 == u->to / 8) &&
+    (abs(u->to - u->from) == 2)) {
+
+    if (side) { // white castled
+      if (u->to == G1) {
+        B->WHITE[ROOK] &= ~(1ULL << F1);
+        B->WHITE[ROOK] |= (1ULL << H1);
+      }
+      else if (u->to == C1) {
+        B->WHITE[ROOK] &= ~(1ULL << D1);
+        B->WHITE[ROOK] |= (1ULL << A1);
+      }
+    } else { // black castled
+      if (u->to == G8) {
+        B->BLACK[ROOK] &= ~(1ULL << F8);
+        B->BLACK[ROOK] |= (1ULL << H8);
+      }
+      else if (u->to == C8) {
+        B->BLACK[ROOK] &= ~(1ULL << D8);
+        B->BLACK[ROOK] |= (1ULL << A8);
+      }
+    }
+  }
+
+  B->whites = whites(B);
+  B->blacks = blacks(B);
+}
+
+uint64_t hash_board(const board* B) {
+  uint64_t hash = 0;
+
+  for (int i = 0; i < NUM_PIECES; ++i) {
+    hash ^= B->WHITE[i] * 0x9e3779b97f4a7c15ULL;
+    hash ^= B->BLACK[i] * 0xc3a5c85c97cb3127ULL;
+  }
+
+  hash ^= B->whites * 0x4cf5ad432745937fULL;
+  hash ^= B->blacks * 0x94d049bb133111ebULL;
+  hash ^= ((uint64_t)B->white) << 1;
+  hash ^= ((uint64_t)B->castle) << 2;
+  hash ^= ((uint64_t)B->cc) << 3;
+
+  return hash;
+}
+
+uint64_t hash_snapshot(const board_snapshot* S) {
+  uint64_t hash = 0;
+
+  for (int i = 0; i < NUM_PIECES; ++i) {
+    hash ^= S->WHITE[i] * 0x9e3779b97f4a7c15ULL;
+    hash ^= S->BLACK[i] * 0xc3a5c85c97cb3127ULL;
+  }
+
+  hash ^= S->whites * 0x4cf5ad432745937fULL;
+  hash ^= S->blacks * 0x94d049bb133111ebULL;
+  hash ^= ((uint64_t)S->white) << 1;
+  hash ^= ((uint64_t)S->castle) << 2;
+  hash ^= ((uint64_t)S->cc) << 3;
+
   return hash;
 }
 
@@ -730,7 +823,7 @@ void restore_snapshot(board *B, const board_snapshot *S) {
 int check(const board *B, int side) {
   uint64_t all = B->whites | B->blacks;
   uint64_t k = side ? B->BLACK[KING] : B->WHITE[KING];
-  int ksq = __builtin_ctzll(k);
+  int ksq = lsb(k);
 
   // pawn
   uint64_t atkP = side ? ((B->WHITE[PAWN] & ~FILE_A) << 9) | ((B->WHITE[PAWN] & ~FILE_H) << 7) : ((B->BLACK[PAWN] & ~FILE_H) >> 7) | ((B->BLACK[PAWN] & ~FILE_A) >> 9);
@@ -739,7 +832,7 @@ int check(const board *B, int side) {
   // knight
   uint64_t knights = side ? B->WHITE[KNIGHT] : B->BLACK[KNIGHT];
   while (knights) {
-    int sq = __builtin_ctzll(knights);
+    int sq = lsb(knights);
     knights &= knights - 1;
     if (B->jumps[sq] & (1ULL << ksq)) return 1;
   }
@@ -747,7 +840,7 @@ int check(const board *B, int side) {
   // diagonal
   uint64_t sliders = (side ? B->WHITE[BISHOP] : B->BLACK[BISHOP]) | (side ? B->WHITE[QUEEN] : B->BLACK[QUEEN]);
   while (sliders) {
-    int sq = __builtin_ctzll(sliders);
+    int sq = lsb(sliders);
     sliders &= sliders - 1;
     if (generate_bishop_attacks(sq, all) & (1ULL << ksq)) return 1;
   }
@@ -755,14 +848,14 @@ int check(const board *B, int side) {
   // orthogonal
   sliders = (side ? B->WHITE[ROOK] : B->BLACK[ROOK]) | (side ? B->WHITE[QUEEN] : B->BLACK[QUEEN]);
   while (sliders) {
-    int sq = __builtin_ctzll(sliders);
+    int sq = lsb(sliders);
     sliders &= sliders - 1;
     if (generate_rook_attacks(sq, all) & (1ULL << ksq)) return 1;
   }
 
   // king
   uint64_t oppk = side ? B->WHITE[KING] : B->BLACK[KING];
-  int tsq = __builtin_ctzll(oppk);
+  int tsq = lsb(oppk);
   if (circle(tsq) & (1ULL << ksq)) return 1;
 
   return 0;
@@ -811,18 +904,18 @@ static inline uint64_t white_attacks(const board *B) {
 
   // knight
   uint64_t n = B->WHITE[KNIGHT];
-  while (n) { int s = __builtin_ctzll(n); n &= n-1; atk |= B->jumps[s]; }
+  while (n) { int s = lsb(n); n &= n-1; atk |= B->jumps[s]; }
 
   // diagonal
   uint64_t bq = B->WHITE[BISHOP] | B->WHITE[QUEEN];
-  while (bq) { int s = __builtin_ctzll(bq); bq &= bq-1; atk |= generate_bishop_attacks(s, occ); }
+  while (bq) { int s = lsb(bq); bq &= bq-1; atk |= generate_bishop_attacks(s, occ); }
 
   // files/ranks
   uint64_t rq = B->WHITE[ROOK] | B->WHITE[QUEEN];
-  while (rq) { int s = __builtin_ctzll(rq); rq &= rq-1; atk |= generate_rook_attacks(s, occ); }
+  while (rq) { int s = lsb(rq); rq &= rq-1; atk |= generate_rook_attacks(s, occ); }
 
   // king
-  int ks = __builtin_ctzll(B->WHITE[KING]);
+  int ks = lsb(B->WHITE[KING]);
   atk |= circle(ks);
 
   return atk;
@@ -838,18 +931,18 @@ static inline uint64_t black_attacks(const board *B) {
 
   // knights
   uint64_t n = B->BLACK[KNIGHT];
-  while (n) { int s = __builtin_ctzll(n); n &= n-1; atk |= B->jumps[s]; }
+  while (n) { int s = lsb(n); n &= n-1; atk |= B->jumps[s]; }
 
   // diagonal
   uint64_t bq = B->BLACK[BISHOP] | B->BLACK[QUEEN];
-  while (bq) { int s = __builtin_ctzll(bq); bq &= bq-1; atk |= generate_bishop_attacks(s, occ); }
+  while (bq) { int s = lsb(bq); bq &= bq-1; atk |= generate_bishop_attacks(s, occ); }
 
   // files/ranks
   uint64_t rq = B->BLACK[ROOK] | B->BLACK[QUEEN];
-  while (rq) { int s = __builtin_ctzll(rq); rq &= rq-1; atk |= generate_rook_attacks(s, occ); }
+  while (rq) { int s = lsb(rq); rq &= rq-1; atk |= generate_rook_attacks(s, occ); }
 
   // king
-  int ks = __builtin_ctzll(B->BLACK[KING]);
+  int ks = lsb(B->BLACK[KING]);
   atk |= circle(ks);
 
   return atk;

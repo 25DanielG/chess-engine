@@ -130,22 +130,22 @@ static int eg_table[12][64];
 
 static const int gpi[12] = { 0,  0,  1,  1,  1,  1,  2,  2,  4,  4,  0,  0 }; // wp, bp, wn, bn, wb, bb, wr, br, wq, bq, wk, bk
 
-int tapered(board *B); // original tapered eval function
-int mat_eval(board *B);
-int center_control(board *B);
-int king_safe(board *B);
-int mobility(board *B);
-int mid_eval(board *B);
-int phase(board *B);
-int scale(board *B, int eg_score);
-int end_mat_eval(board *B);
-int king_activity(board *B);
-int pawn_structure(board *B);
-int passed_pawns(board *B);
-int development(board *B);
+int tapered(const board *B); // original tapered eval function
+int mat_eval(const board *B);
+int center_control(const board *B);
+int king_safe(const board *B);
+int mobility(const board *B);
+int mid_eval(const board *B);
+int phase(const board *B);
+int scale(const board *B, int eg_score);
+int end_mat_eval(const board *B);
+int king_activity(const board *B);
+int pawn_structure(const board *B);
+int passed_pawns(const board *B);
+int development(const board *B);
 int castle_eval(const board *B);
-int end_eval(board *B);
+int end_eval(const board *B);
 static inline int pop_lsb(uint64_t *bb);
 void init_pesto_tables(void);
-void pesto_terms(board *B, int *mg, int *eg, int *p24);
-int blended_eval(board *B); // blended eval function
+void pesto_terms(const board *B, int *mg, int *eg, int *p24);
+int blended_eval(const board *B); // blended eval function

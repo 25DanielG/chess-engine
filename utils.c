@@ -2,6 +2,7 @@
 #include "lib/board.h"
 #include <stddef.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdio.h>
 
 int pi(char file, char rank) {

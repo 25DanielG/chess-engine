@@ -1,7 +1,10 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 int pi(char file, char rank);
 void ip(int index, char *file, char *rank);
