@@ -10,8 +10,13 @@
 #include "lib/eval.h"
 #include "lib/utils.h"
 
+move_t pv_table[MAX_PLY][MAX_PLY];
+int pv_length[MAX_PLY];
+
 move_t move_stack[MAX_PLY][MAX_MOVES];
 move_t qmove_stack[MAX_QPLY][MAX_MOVES];
+move_t last_move[MAX_PLY];
+move_t counter_move[2][64][64]; // best reply side, from, to
 
 static const int PIECE_PT[64] = {
   -1, /*1*/ PAWN, /*2*/ KNIGHT, -1, /*4*/ BISHOP, -1, -1, -1, /*8*/ ROOK, -1, -1, -1, -1, -1, -1, -1,
@@ -28,7 +33,17 @@ static void init_ordering_tables(void) {
     for (int a = 0; a < NUM_PIECES; ++a)
       mvv_lva[v][a] = (value(v) << 4) - value(a);
 
-  for (int p = 0; p < MAX_PLY; ++p) killer1[p].from = killer2[p].from = 255; // clear killers
+  for (int p = 0; p < MAX_PLY; ++p) {
+    killer1[p].from = 255;
+    killer2[p].from = 255; // clear killers
+    last_move[p].from = 255; // no move
+  }
+
+  for (int s = 0; s < 2; ++s)
+    for (int f = 0; f < 64; ++f)
+      for (int t = 0; t < 64; ++t)
+        counter_move[s][f][t].from = 255; // empty
+
   memset(history_tbl, 0, sizeof(history_tbl));
 }
 
@@ -64,6 +79,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   *(info + 1) += (depth == 0) ? 1 : 0;
 #endif
   ++nodes;
+  pv_length[ply] = 0;
   if (ply >= MAX_PLY) return blended_eval(B);
   if (time_over()) return blended_eval(B);
   int old = B->white;
@@ -164,6 +180,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
 
     make_move(B, &moves[i], max, &u);
+    last_move[ply] = moves[i]; // last move
     int gives_check = check(B, !max);
     int eval;
     int lmr = 0;
@@ -202,6 +219,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
 
     unmake_move(B, &moves[i], max, &u);
+    int improve = (max ? (eval > best) : (eval < best));
 
     if (max) {
       if (eval > best) best = eval;
@@ -211,13 +229,29 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       if (eval < beta)  beta  = eval;
     }
 
+    if (improve && ply < MAX_PLY) {
+      pv_table[ply][ply] = moves[i];
+      int clen = pv_length[ply + 1];
+      for (int k = 0; k < clen; ++k)
+        pv_table[ply][ply + 1 + k] = pv_table[ply + 1][ply + 1 + k];
+      pv_length[ply] = clen + 1;
+    }
+
     if (beta <= alpha) {
-      if (!cap) { // update killers and history for quiet moves
+      if (!cap) { // update killers, history, countermove for quiet moves
         if (!equals(killer1[ply], moves[i])) {
           killer2[ply] = killer1[ply];
           killer1[ply] = moves[i];
         }
         history_tbl[max][moves[i].piece][moves[i].to] += depth * depth;
+
+        if (ply > 0) {
+          move_t prev = last_move[ply - 1]; // move before this node
+          if (prev.from != 255) {
+            int prev_side = max ^ 1; // prev move played by opp
+            counter_move[prev_side][prev.from][prev.to] = moves[i];
+          }
+        }
       }
       break;
     }
@@ -348,6 +382,9 @@ int find_move(bot *bot, int is_white, int limit) {
   deadline = start + limit;
   time_flag = 0;
   init_ordering_tables();
+  for (int i = 0; i < MAX_PLY; ++i) {
+    pv_length[i] = 0;
+  }
 #ifdef DEBUG
   printf("-------------STATS-------------\n");
   double debug_start = clock();
@@ -363,6 +400,7 @@ int find_move(bot *bot, int is_white, int limit) {
   move_t *moves;
   int move_count = movegen_ply(bot->B, is_white, 1, 0, &moves, move_stack, MAX_MOVES);
   int depth;
+  int comp_depth = 0;
   if (move_count == 0) return -1; // no legal moves
   for (depth = 1; depth <= bot->depth; ++depth) {
     nodes = 0;
@@ -377,16 +415,25 @@ int find_move(bot *bot, int is_white, int limit) {
       int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 1);
       restore_snapshot(bot->B, &snap);
       int packed = moves[i].from * 64 + moves[i].to;
-      // print_move_eval("  Root move", packed, eval);
       if ((is_white && eval > lbest) || (!is_white && eval < lbest)) {
         lbest = eval;
         lmove = packed;
+
+        pv_table[0][0] = moves[i]; // root move
+        int clen = pv_length[1]; // PV
+        for (int k = 0; k < clen; ++k) {
+          pv_table[0][k + 1] = pv_table[1][k + 1];
+        }
+        pv_length[0] = clen + 1;
       }
       if (time_over()) {
 #ifdef DEBUG
         printf("Time limit reached...\n");
 #endif
-        if (move == -1) move = lmove;
+        if (move == -1) {
+          move = lmove;
+          best = lbest;
+        }
         goto end_find;
       }
     }
@@ -405,6 +452,14 @@ end_find:
   printf("Time taken: %f seconds\n", time);
   printf("Visited nodes: %ld, leaf nodes: %ld, quiescence nodes %ld\n", *info, *(info + 1), *(info + 2));
   printf("Eval: %d, Mid Eval: %d, End Eval %d, Phase: %d, Scale: %d\n", best, mid_eval(bot->B), end_eval(bot->B), phase(bot->B), scale(bot->B, end_eval(bot->B)));
+  printf("Main PV line: ");
+    for (int i = 0; i < pv_length[0]; ++i) {
+      int from = pv_table[0][i].from;
+      int to   = pv_table[0][i].to;
+      printf("%c%c%c%c", 'a' + (from % 8), '1' + (from / 8), 'a' + (to   % 8), '1' + (to   / 8));
+      if (i < pv_length[0] - 1) printf(" ");
+    }
+    printf("\n");
   printf("-------------------------------\n");
 #endif
   return move;
@@ -436,17 +491,36 @@ static void move_sort(move_t *mv, int n) {
 }
 
 static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply) {
+  move_t prev = { .from = 255 }; // prev move
+  move_t cm = { .from = 255 };
+
+  if (ply > 0) {
+    prev = last_move[ply - 1];
+    if (prev.from != 255) {
+      int opp = side_to_move ^ 1; // side that played prev move
+      cm = counter_move[opp][prev.from][prev.to];
+    }
+  }
+
   for (int i = 0; i < n; ++i) {
     int score = 0;
     if (is_capture(B, side_to_move, &mv[i])) { // mvvlva
       int vic = victim_square(B, side_to_move, mv[i].to);
       score = (1 << 22) + (vic >= 0 ? mvv_lva[vic][mv[i].piece] : 0);
     } else {
-      if (equals(killer1[ply], mv[i])) score = (1 << 21); // killers
+      // killers
+      if (equals(killer1[ply], mv[i])) score = (1 << 21);
       else if (equals(killer2[ply], mv[i])) score = (1 << 20);
-      score += history_tbl[side_to_move][mv[i].piece][mv[i].to]; // history
+
+      if (cm.from != 255 && equals(cm, mv[i])) { // countermove
+        score += (1 << 19); // under killer1
+      }
+
+      // history
+      score += history_tbl[side_to_move][mv[i].piece][mv[i].to];
     }
     mv[i].order = score;
   }
+
   move_sort(mv, n);
 }

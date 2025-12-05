@@ -14,6 +14,7 @@
 #define MAX_QPLY (16)
 #define NONE_PIECE (255)
 #define MAX_MOVES (256)
+#define MAX_PV 128
 
 #define LMR_ENABLED (1)
 #define LMR_MIN_DEPTH (3)
@@ -49,8 +50,13 @@ struct bot_header {
 
 typedef struct bot_header bot;
 
+extern move_t pv_table[MAX_PLY][MAX_PLY];
+extern int pv_length[MAX_PLY];
+
 extern move_t move_stack[MAX_PLY][MAX_MOVES];
 extern move_t qmove_stack[MAX_QPLY][MAX_MOVES];
+extern move_t last_move[MAX_PLY];
+extern move_t counter_move[2][64][64]; // best reply side, from, to
 
 static double deadline;
 static long nodes;
