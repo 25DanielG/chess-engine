@@ -24,6 +24,10 @@
 #define NM_MIN_DEPTH (3)
 #define NM_REDUCTION (2) // nm depth reduction
 
+#define LMP_ENABLED (1)
+#define LMP_MAX_DEPTH (3) // only shallow depth
+#define LMP_SKIP (8) // skip quiet moves after 8th
+
 #define CAPPRUNE_ENABLED (1) // quiescence capture pruning
 
 struct bot_header {

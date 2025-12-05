@@ -69,8 +69,8 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   int old = B->white;
   B->white = max;
   if (depth == 0) {
-    int in_check = check(B, !max);
-    if (in_check) {
+    int ch = check(B, !max);
+    if (ch) {
       int v = oneply_check(B, max, alpha, beta, info, ply);
       B->white = old;
       return v;
@@ -81,9 +81,9 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     return v;
   }
 
-  if (NM_ENABLED) {
-    int in_check = check(B, !max);
+  int in_check = check(B, !max);
 
+  if (NM_ENABLED) {
     if (!in_check && depth >= NM_MIN_DEPTH && ply > 0) {
       int R = NM_REDUCTION;
       int nmdepth = depth - 1 - R;
@@ -120,6 +120,11 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   for (i = 0; i < move_count; ++i) {
     undo_t u;
     int cap = is_capture(B, max, &moves[i]);
+
+    if (LMP_ENABLED && !cap && !in_check && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP) { // not check, not root
+      continue; // prune
+    }
+
     make_move(B, &moves[i], max, &u);
 
     int eval;
