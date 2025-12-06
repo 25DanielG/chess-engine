@@ -67,7 +67,7 @@ static void draw_board(SDL_Renderer* R) {
     for (int f = 0; f < 8; ++f) {
       int x = MARGIN + f * TILE;
       int y = MARGIN + (7 - r) * TILE;
-      int dark = ((r + f) & 1);
+      int dark = !((r + f) & 1);
       int shade = dark ? 118 : 238; // light = 238, dark = 118
       SDL_SetRenderDrawColor(R, shade, shade, shade, 255);
       SDL_Rect sq = { x, y, TILE, TILE };
