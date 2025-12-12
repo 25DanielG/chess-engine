@@ -462,21 +462,39 @@ int movegen(board* B, int white, move_t** move_list, int check_legal) {
     while (to_moves) {
       int to = lsb(to_moves);
       to_moves &= to_moves - 1;
-
       undo_t u;
       int legal = 1;
+      move_t base = { piece, from, to, 0, 0 };
 
       if (check_legal) {
-        make_move(B, &(move_t){piece, from, to}, white, & u);
+        make_move(B, &base, white, & u);
         if (check(B, !white)) {
           legal = 0; // king in check
         }
-        unmake_move(B, &(move_t){piece, from, to}, white, & u);
+        unmake_move(B, &base, white, & u);
       }
 
       if (!legal) continue;
+      uint64_t to_mask = 1ULL << to;
 
-      (*move_list)[count++] = (move_t){ piece, from, to };
+      if (piece == PAWN) {
+        if (white && (to_mask & RANK_8)) { // white = rank 8, black = rank 1
+          (*move_list)[count++] = (move_t){ PAWN, from, to, KNIGHT, 0 };
+          (*move_list)[count++] = (move_t){ PAWN, from, to, BISHOP, 0 };
+          (*move_list)[count++] = (move_t){ PAWN, from, to, ROOK, 0 };
+          (*move_list)[count++] = (move_t){ PAWN, from, to, QUEEN, 0 };
+        } else if (!white && (to_mask & RANK_1)) {
+          (*move_list)[count++] = (move_t){ PAWN, from, to, KNIGHT, 0 };
+          (*move_list)[count++] = (move_t){ PAWN, from, to, BISHOP, 0 };
+          (*move_list)[count++] = (move_t){ PAWN, from, to, ROOK, 0 };
+          (*move_list)[count++] = (move_t){ PAWN, from, to, QUEEN, 0 };
+        } else {
+          (*move_list)[count++] = (move_t){ piece, from, to, 0, 0 }; // normal pawn move
+        }
+      } else {
+        // non-pawn move
+        (*move_list)[count++] = (move_t){ piece, from, to, 0, 0 };
+      }
 
       if (count >= max_moves) {
         max_moves *= 2;
@@ -509,16 +527,47 @@ int movegen_ply(board* B, int white, int check_legal, int ply, move_t** out, mov
 
       undo_t u;
       int legal = 1;
+      move_t base = { piece, from, to, 0, 0 };
       if (check_legal) {
-        make_move(B, &(move_t){piece, from, to}, white, & u);
+        make_move(B, &base, white, & u);
         if (check(B, !white))
           legal = 0;
-        unmake_move(B, &(move_t){piece, from, to}, white, & u);
+        unmake_move(B, &base, white, & u);
       }
 
       if (!legal) continue;
+      uint64_t to_mask = 1ULL << to;
 
-      list[count++] = (move_t){ piece, from, to };
+      if (piece == PAWN) {
+        if (white && (to_mask & RANK_8)) {
+          if (count + 4 > max_moves) {
+            printf("makes move reached");
+            abort();
+          }
+          list[count++] = (move_t){ PAWN, from, to, KNIGHT, 0 };
+          list[count++] = (move_t){ PAWN, from, to, BISHOP, 0 };
+          list[count++] = (move_t){ PAWN, from, to, ROOK, 0 };
+          list[count++] = (move_t){ PAWN, from, to, QUEEN, 0 };
+        } else if (!white && (to_mask & RANK_1)) {
+          if (count + 4 > max_moves) {
+            printf("makes move reached");
+            abort();
+          }
+          list[count++] = (move_t){ PAWN, from, to, KNIGHT, 0 };
+          list[count++] = (move_t){ PAWN, from, to, BISHOP, 0 };
+          list[count++] = (move_t){ PAWN, from, to, ROOK, 0 };
+          list[count++] = (move_t){ PAWN, from, to, QUEEN, 0 };
+        } else {
+          list[count++] = (move_t){ piece, from, to, 0, 0 };
+        }
+      } else {
+        list[count++] = (move_t){ piece, from, to, 0, 0 };
+      }
+
+      if (count >= MAX_MOVES) {
+        printf("MOVEGEN OVERFLOW: %d moves\n", count);
+        abort();
+      }
     }
   }
 
@@ -588,7 +637,7 @@ int value(int piece) {
   }
 }
 
-void fast_execute(board* B, int piece, int from, int to, int white) {
+void fast_execute(board *B, int piece, int from, int to, int white, int promo) {
   uint64_t from_mask = 1ULL << from;
   uint64_t to_mask = 1ULL << to;
 
@@ -642,9 +691,17 @@ void fast_execute(board* B, int piece, int from, int to, int white) {
   }
 
   if (white) {
-    B->WHITE[piece] |= to_mask;
+    if (piece == PAWN && promo != 0) {
+      B->WHITE[promo] |= to_mask; // promoted piece
+    } else {
+      B->WHITE[piece] |= to_mask;
+    }
   } else {
-    B->BLACK[piece] |= to_mask;
+    if (piece == PAWN && promo != 0) {
+      B->BLACK[promo] |= to_mask; // promoted piece
+    } else {
+      B->BLACK[piece] |= to_mask; // normal move
+    }
   }
 
   if (piece == KING && (from / 8 == to / 8) && (abs(to - from) == 2)) {
@@ -677,7 +734,7 @@ void fast_execute(board* B, int piece, int from, int to, int white) {
 
 void make_move(board* B, const move_t* m, int side, undo_t* u) {
   uint64_t from_mask = 1ULL << m->from;
-  uint64_t to_mask   = 1ULL << m->to;
+  uint64_t to_mask = 1ULL << m->to;
 
   u->moved_piece = m->piece;
   u->from = m->from;
@@ -688,6 +745,8 @@ void make_move(board* B, const move_t* m, int side, undo_t* u) {
 
   u->captured_piece = -1;
   u->captured_square = m->to;
+
+  u->promo = m->promo;
 
   if (side) { // white moved
     for (int i = 0; i < NUM_PIECES; ++i) {
@@ -705,26 +764,36 @@ void make_move(board* B, const move_t* m, int side, undo_t* u) {
     }
   }
 
-  fast_execute(B, m->piece, m->from, m->to, side);
+  fast_execute(B, m->piece, m->from, m->to, side, m->promo);
 }
 
 void unmake_move(board* B, const move_t* m, int side, const undo_t* u) {
   uint64_t from_mask = 1ULL << u->from;
-  uint64_t to_mask   = 1ULL << u->to;
+  uint64_t to_mask = 1ULL << u->to;
 
   B->castle = u->prev_castle;
   B->cc = u->prev_cc;
 
   if (side) { // white moved
-    B->WHITE[u->moved_piece] &= ~to_mask;
-    B->WHITE[u->moved_piece] |= from_mask;
+    if (u->promo != 0 && u->moved_piece == PAWN) {
+      B->WHITE[u->promo] &= ~to_mask;
+      B->WHITE[PAWN] |= from_mask;
+    } else {
+      B->WHITE[u->moved_piece] &= ~to_mask;
+      B->WHITE[u->moved_piece] |= from_mask;
+    }
 
     if (u->captured_piece != -1) {
       B->BLACK[u->captured_piece] |= (1ULL << u->captured_square);
     }
   } else { // black moved
-    B->BLACK[u->moved_piece] &= ~to_mask;
-    B->BLACK[u->moved_piece] |= from_mask;
+    if (u->promo != 0 && u->moved_piece == PAWN) {
+      B->BLACK[u->promo] &= ~to_mask;
+      B->BLACK[PAWN] |= from_mask;
+    } else {
+      B->BLACK[u->moved_piece] &= ~to_mask;
+      B->BLACK[u->moved_piece] |= from_mask;
+    }
 
     if (u->captured_piece != -1) {
       B->WHITE[u->captured_piece] |= (1ULL << u->captured_square);
@@ -872,7 +941,7 @@ void restore_position(board *B, uint64_t *wpos, uint64_t *bpos, int *white) {
   B->white = *white;
 }
 
-void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int white) {
+void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int white, uint8_t castle, u_int8_t cc) {
   for (int i = 0; i < NUM_PIECES; ++i) {
     B->WHITE[i] = 0ULL;
     B->BLACK[i] = 0ULL;
@@ -886,6 +955,8 @@ void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int w
     w |= B->WHITE[i];
     b |= B->BLACK[i];
   }
+  B->castle = castle;
+  B->cc = cc;
   B->whites = w;
   B->blacks = b;
   B->white = white;
@@ -961,7 +1032,7 @@ static inline void add_castles(board *B, int white, move_t **list, int *count, i
         *list = realloc(*list, *max_moves * sizeof(move_t));
         if (!*list) exit(1);
       }
-      (*list)[(*count)++] = (move_t){ KING, E1, G1 };
+      (*list)[(*count)++] = (move_t){ KING, E1, G1, 0 };
     }
 
     // white queen side: e1 to c1
@@ -972,7 +1043,7 @@ static inline void add_castles(board *B, int white, move_t **list, int *count, i
         *list = realloc(*list, *max_moves * sizeof(move_t));
         if (!*list) exit(1);
       }
-      (*list)[(*count)++] = (move_t){ KING, E1, C1 };
+      (*list)[(*count)++] = (move_t){ KING, E1, C1, 0 };
     }
   } else {
     if (!(B->BLACK[KING] & (1ULL << E8))) return; // king not on e8
@@ -986,7 +1057,7 @@ static inline void add_castles(board *B, int white, move_t **list, int *count, i
         *list = realloc(*list, *max_moves * sizeof(move_t));
         if (!*list) exit(1);
       }
-      (*list)[(*count)++] = (move_t){ KING, E8, G8 };
+      (*list)[(*count)++] = (move_t){ KING, E8, G8, 0 };
     }
 
     // black queen side: e8 to c8
@@ -997,7 +1068,7 @@ static inline void add_castles(board *B, int white, move_t **list, int *count, i
         *list = realloc(*list, *max_moves * sizeof(move_t));
         if (!*list) exit(1);
       }
-      (*list)[(*count)++] = (move_t){ KING, E8, C8 };
+      (*list)[(*count)++] = (move_t){ KING, E8, C8, 0 };
     }
   }
 }
@@ -1016,7 +1087,7 @@ static inline void add_castles_nalloc(board *B, int white, move_t *list, int *co
       !(opp & ((1ULL << E1) | (1ULL << F1) | (1ULL << G1)))) {
 
       if (*count < max_moves) {
-        list[(*count)++] = (move_t){ KING, E1, G1 };
+        list[(*count)++] = (move_t){ KING, E1, G1, 0 };
       }
     }
 
@@ -1027,7 +1098,7 @@ static inline void add_castles_nalloc(board *B, int white, move_t *list, int *co
       !(opp & ((1ULL << E1) | (1ULL << D1) | (1ULL << C1)))) {
 
       if (*count < max_moves) {
-        list[(*count)++] = (move_t){ KING, E1, C1 };
+        list[(*count)++] = (move_t){ KING, E1, C1, 0 };
       }
     }
   } else {
@@ -1041,7 +1112,7 @@ static inline void add_castles_nalloc(board *B, int white, move_t *list, int *co
       !(opp & ((1ULL << E8) | (1ULL << F8) | (1ULL << G8)))) {
 
       if (*count < max_moves) {
-        list[(*count)++] = (move_t){ KING, E8, G8 };
+        list[(*count)++] = (move_t){ KING, E8, G8, 0 };
       }
     }
 
@@ -1052,7 +1123,7 @@ static inline void add_castles_nalloc(board *B, int white, move_t *list, int *co
       !(opp & ((1ULL << E8) | (1ULL << D8) | (1ULL << C8)))) {
 
       if (*count < max_moves) {
-        list[(*count)++] = (move_t){ KING, E8, C8 };
+        list[(*count)++] = (move_t){ KING, E8, C8, 0 };
       }
     }
   }

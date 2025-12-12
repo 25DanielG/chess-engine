@@ -162,6 +162,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   for (i = 0; i < move_count; ++i) {
     undo_t u;
     int cap = is_capture(B, max, &moves[i]);
+
     if (LMP_ENABLED && !cap && !in_check && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP) { // not check, not root
       continue; // prune
     }
@@ -193,6 +194,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
         int lmr_depth = depth - 1 - LMR_REDUCTION;
         if (lmr_depth < 1) lmr_depth = 1; // safety
         eval = minimax(B, lmr_depth, !max, alpha, beta, info, ply + 1);
+
         if ((max && eval > alpha) || (!max && eval < beta)) {
           eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
         }
@@ -408,12 +410,12 @@ int find_move(bot *bot, int is_white, int limit) {
     int lbest = is_white ? INT32_MIN : INT32_MAX;
     int lmove = -1;
     for (i = 0; i < move_count; ++i) {
-      board_snapshot snap;
-      save_snapshot(bot->B, &snap);
-      fast_execute(bot->B, moves[i].piece, moves[i].from, moves[i].to, is_white);
+      undo_t u;
+      make_move(bot->B, &moves[i], is_white, &u);
       bot->B->white = !is_white;
       int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 1);
-      restore_snapshot(bot->B, &snap);
+      bot->B->white = is_white;
+      unmake_move(bot->B, &moves[i], is_white, &u);
       int packed = moves[i].from * 64 + moves[i].to;
       if ((is_white && eval > lbest) || (!is_white && eval < lbest)) {
         lbest = eval;

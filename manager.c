@@ -410,23 +410,26 @@ uint64_t imove(int piece, uint64_t from_mask, board *B, int *white) {
 
 void test_position(board *B) {
   uint64_t white[NUM_PIECES] = {
-    0x000000100800E700ULL, // pawns
-    0x0000000000040040ULL, // knights
-    0x0000000000000004ULL, // bishops
-    0x0000000000000081ULL, // rooks
-    0x0000000000001000ULL, // queen
-    0x0000000000000010ULL  // king
+    0x0000004100000000ULL,
+    0x0000000000000000ULL,
+    0x0000080000000000ULL,
+    0x0000000000000000ULL,
+    0x0000000000000000ULL,
+    0x0000000000000800ULL
   };
+
   uint64_t black[NUM_PIECES] = {
-    0x00B7280000000000ULL, // pawns
-    0x0000008002000000ULL, // knights
-    0x0040000000000000ULL, // bishops
-    0x2100000000000000ULL, // rooks
-    0x0800000000000000ULL, // queen
-    0x4000000000000000ULL  // king
+    0x0022550000000000ULL,
+    0x0000000000000000ULL,
+    0x0000000004000000ULL,
+    0x0000000000000000ULL,
+    0x0000000000000000ULL,
+    0x1000000000000000ULL
   };
-  int w = 0;
-  load_position(B, white, black, w);
+  int w = 1;
+  uint8_t castle = 0;
+  uint8_t cc = 0;
+  load_position(B, white, black, w, castle, cc);
 }
 
 void add_history(int pt, int from, int to, int capture) {

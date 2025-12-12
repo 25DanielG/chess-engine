@@ -78,6 +78,7 @@ typedef struct {
   int piece;
   int from; // 0 to 63
   int to; // 0 to 63
+  int promo; // 0 no promotion
   int order; // cached ordering score
 } move_t;
 
@@ -89,6 +90,7 @@ typedef struct {
   int captured_square; // usually == to
   uint8_t prev_castle;
   uint8_t prev_cc;
+  int promo; // 0 no promotion
 } undo_t;
 
 typedef struct board_header board;
@@ -129,7 +131,7 @@ int movegen_ply(board *B, int white, int check_legal, int ply, move_t **out, mov
 board *clone(board *B);
 uint64_t sided_passed_pawns(uint64_t friend, uint64_t opp, int white);
 int value(int piece);
-void fast_execute(board *B, int piece, int from, int to, int white);
+void fast_execute(board *B, int piece, int from, int to, int white, int promo);
 void assert_board(const board *B);
 void make_move(board *B, const move_t *m, int white, undo_t *u);
 void unmake_move(board *B, const move_t *m, int white, const undo_t *u);
@@ -138,7 +140,7 @@ uint64_t hash_snapshot(const board_snapshot* S);
 void save_snapshot(const board *B, board_snapshot *S);
 void restore_snapshot(board *B, const board_snapshot *S);
 int check(const board *B, int side);
-void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int white);
+void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int white, uint8_t castle, u_int8_t cc);
 static inline uint64_t white_attacks(const board *B);
 static inline uint64_t black_attacks(const board *B);
 static inline void add_castles(board *B, int white, move_t **list, int *count, int *max_moves);

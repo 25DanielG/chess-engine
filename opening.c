@@ -215,7 +215,7 @@ int load_openings(const char *filename) {
         san_from_move(pt, mf, mt, capture, tmp, sizeof(tmp));
         if (strcmp(tmp, san_moves[i]) == 0) {
           codes[i] = mf * 64 + mt;
-          fast_execute(B, pt, mf, mt, side); // apply move to test board
+          fast_execute(B, pt, mf, mt, side, 0); // apply move to test board, no promotion in opening
           side = !side;
           found = 1;
           break;
