@@ -94,6 +94,11 @@ int run(void) {
         printf("Move type: %s\n", move_type);
 #endif
         if (execute(B, from, to, &B->white)) {
+          if (promotion_move(1, pt, to)) { // side is 1
+            int newp = prompt_promotion();
+            apply_promotion(B, 1, to, newp); // side is 1
+          }
+
           add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
@@ -129,6 +134,11 @@ int run(void) {
         int pt = piece_at(B, from);
 
         if (execute(B, from, to, &B->white)) {
+          if (promotion_move(0, pt, to)) { // side is 0
+            int newp = prompt_promotion();
+            apply_promotion(B, 0, to, newp); // side is 0
+          }
+
           add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;

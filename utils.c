@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 int pi(char file, char rank) {
   if (file < 'a' || file > 'h' || rank < '1' || rank > '8') return -1;
@@ -97,4 +98,43 @@ void san_from_move(int pt, int from, int to, int capture, char *out, size_t out_
     out[idx++] = '1' + rank_to;
   }
   out[idx] = '\0';
+}
+
+int piece_char(char c) {
+  switch (c) {
+    case 'q': return QUEEN;
+    case 'r': return ROOK;
+    case 'b': return BISHOP;
+    case 'n': return KNIGHT;
+    default: return -1;
+  }
+}
+
+bool promotion_move(int side, int pt, int to) {
+  if (pt != PAWN)
+    return false;
+  int rank = to / 8;
+  return side ? (rank == 7) : (rank == 0); // white promotes ind 7, black, ind 0
+}
+
+int prompt_promotion(void) {
+  char line[64];
+  while (true) {
+    printf("Promote to (q/r/b/n): ");
+    if (!fgets(line, sizeof(line), stdin)) {
+      return QUEEN; // default to queen eof
+    }
+
+    for (int i = 0; line[i]; ++i) {
+      char c = line[i];
+      if (c == ' ' || c == '\t' || c == '\n' || c == '\r') continue;
+      if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+
+      int p = piece_char(c);
+      if (p != -1) return p;
+
+      break;
+    }
+    printf("Invalid piece, q, r, b, or n.\n");
+  }
 }

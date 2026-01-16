@@ -108,6 +108,41 @@ static void draw_pieces(SDL_Renderer* R, board* B, SDL_Texture* tex[TEX_COUNT]) 
   }
 }
 
+static int piece_sdlkey(SDL_Keycode key) {
+  switch (key) {
+    case SDLK_q: return QUEEN;
+    case SDLK_r: return ROOK;
+    case SDLK_b: return BISHOP;
+    case SDLK_n: return KNIGHT;
+    default: return -1;
+  }
+}
+
+static int sdl_prompt_promotion(SDL_Window* W) {
+  SDL_ShowSimpleMessageBox(
+    SDL_MESSAGEBOX_INFORMATION,
+    "Promotion",
+    "Promote to q , r, b, or n",
+    W
+  );
+
+  SDL_Event e;
+  while (SDL_WaitEvent(&e)) {
+    if (e.type == SDL_QUIT) {
+      return QUEEN; // default if close window
+    }
+    if (e.type == SDL_KEYDOWN) {
+      SDL_Keycode key = e.key.keysym.sym;
+      if (key >= 'A' && key <= 'Z') key = key - 'A' + 'a';
+
+      int p = piece_sdlkey(key);
+      if (p != -1) return p;
+    }
+  }
+
+  return QUEEN;
+}
+
 int run_sdl(void) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     fprintf(stderr, "sdl init: %s\n", SDL_GetError());
@@ -156,7 +191,8 @@ int run_sdl(void) {
 #endif
   board* B = init_board();
   // test_position(B, "3q1rk1/2ppbppp/1p6/1N2Qp2/1P6/3B4/rB1P1PPP/n2K2NR b K - 0 1"); // for testing hardcoded positions
-  test_position(B, "3q1rk1/2pp1ppp/1p3b2/1N3Q2/1P6/3B4/rB1P1PPP/n2K2NR b - - 0 2"); // for testing hardcoded positions
+  // test_position(B, "3q1rk1/2pp1ppp/1p3b2/1N3Q2/1P6/3B4/rB1P1PPP/n2K2NR b - - 0 2"); // for testing hardcoded positions
+  // test_position(B, "k7/1p6/8/8/4KP2/8/8/8 w - - 0 1"); // for testing hardcoded positions
   bot *bwhite = NULL, *bblack = NULL;
   if (WHITE_BOT)
     bwhite = init_bot(B, 1, WHITE_DEPTH, WHITE_LIMIT);
@@ -304,19 +340,33 @@ int run_sdl(void) {
             uint64_t to_mask = 1ULL << to;
             int capture = (B->blacks & to_mask) != 0;
             int pt = piece_at(B, from);
-            if (from != to && execute(B, from, to, &B->white)) {
-              add_history(pt, from, to, capture); // track history
-              ++ply;
-              move = ply / 2;
-              selected = -1;
-              B->white = !B->white;
-            } else {
-              restore_snapshot(B, &snap);
-              TexId t; // update selection if clicked own piece
-              if (piece_tex(B, idx, &t)) {
-                bool white = (t <= wK);
-                if ((B->white && white) || (!B->white && !white))
-                  selected = idx;
+            if (from != to) {
+              board_snapshot snap;
+              save_snapshot(B, &snap);
+
+              int side = B->white;
+              uint64_t to_mask = 1ULL << to;
+              int capture = side ? ((B->blacks & to_mask) != 0) : ((B->whites & to_mask) != 0);
+              int pt = piece_at(B, from);
+              if (execute(B, from, to, &B->white)) {
+                if (promotion_move(side, pt, to)) {
+                  int new_piece = sdl_prompt_promotion(W);
+                  apply_promotion(B, side, to, new_piece);
+                }
+
+                add_history(pt, from, to, capture);
+                ++ply;
+                move = ply / 2;
+                selected = -1;
+                B->white = !B->white;
+              } else {
+                restore_snapshot(B, &snap);
+                TexId t;
+                if (piece_tex(B, idx, &t)) {
+                  bool white = (t <= wK);
+                  if ((B->white && white) || (!B->white && !white))
+                    selected = idx;
+                }
               }
             }
           }

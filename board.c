@@ -1235,3 +1235,18 @@ int square_attacker(const board *B_in, int square, int by_black) {
     return attacked;
   }
 }
+
+void apply_promotion(board *B, int side, int to, int newp) {
+  uint64_t to_mask = 1ULL << to;
+
+  if (side) { // white
+    B->WHITE[PAWN] &= ~to_mask;
+    B->WHITE[newp] |= to_mask;
+  } else { // black
+    B->BLACK[PAWN] &= ~to_mask;
+    B->BLACK[newp] |= to_mask;
+  }
+
+  B->whites = whites(B);
+  B->blacks = blacks(B);
+}

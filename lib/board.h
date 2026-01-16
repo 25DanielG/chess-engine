@@ -147,3 +147,4 @@ static inline uint64_t black_attacks(const board *B);
 static inline void add_castles(board *B, int white, move_t **list, int *count, int *max_moves);
 static inline void add_castles_nalloc(board *B, int white, move_t *list, int *count, int max_moves);
 int square_attacker(const board *B_in, int square, int by_black);
+void apply_promotion(board *B, int side, int to, int newp);

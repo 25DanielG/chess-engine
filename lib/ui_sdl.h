@@ -21,4 +21,6 @@ static int piece_tex(const board* B, int index, TexId* out);
 static void draw_board(SDL_Renderer* R);
 static void draw_highlight(SDL_Renderer* R, int index, SDL_Color c);
 static void draw_pieces(SDL_Renderer* R, board* B, SDL_Texture* tex[TEX_COUNT]);
+static int piece_sdlkey(SDL_Keycode key);
+static int sdl_prompt_promotion(SDL_Window* W);
 int run_sdl(void);
