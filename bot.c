@@ -92,20 +92,30 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       return v;
     }
 
-    int v = quiesce(B, max, alpha, beta, info, 0);
+    int v = ROOT_QUIESCENCE_ENABLED ? quiesce(B, max, alpha, beta, info, 0) : blended_eval(B);
     B->white = old;
     return v;
   }
 
   int in_check = check(B, !max);
+  int pv_node = WINDOW_IS_PV(alpha, beta);
+  int near_root = (ply <= 2);
+  int stand_eval = 0;
+  int have_stand = 0;
+  const int MATE_BOUND = MATE - 2 * QUEEN_VALUE; // near mate bound
 
-  if (NMP_ENABLED) {
-    if (!in_check && depth >= NMP_MIN_DEPTH && ply > 0) {
-      int R = NMP_REDUCTION;
+  if (NMP_ENABLED && !pv_node && !near_root && !in_check && depth >= NMP_MIN_DEPTH && ply > 0) {
+    if (!have_stand) {
+      stand_eval = blended_eval(B);
+      have_stand = 1;
+    }
+
+    if (abs(stand_eval) < MATE_BOUND && ((max && stand_eval >= beta - NMP_MARGIN) || (!max && stand_eval <= alpha + NMP_MARGIN))) { // avoid mate positions
+      int R = NMP_BASE_REDUCTION + NMP_EXTRA_REDUCTION(depth);
       int nmdepth = depth - 1 - R;
       if (nmdepth < 0) nmdepth = 0;
 
-      B->white = !max; // make null move
+      B->white = !max; // give side to opp
       int nmeval = minimax(B, nmdepth, !max, alpha, beta, info, ply + 1);
       B->white = max;
 
@@ -123,19 +133,70 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
   }
 
-  int stand_eval = 0;
-  if (FUT_ENABLED && depth <= FUT_NODE_MAX_DEPTH && !in_check && ply > 0) { // shallow, not check
-    stand_eval = blended_eval(B);
-    if (abs(stand_eval) < MATE - 2 * QUEEN_VALUE) { // not near a mate
-      // margin scaled by depth, like Stockfish (roughly)
+  if (RAZOR_ENABLED && !pv_node && !near_root && !in_check && depth <= RAZOR_MAX_DEPTH && ply > 0) { // not at root
+    if (!have_stand) {
+      stand_eval = blended_eval(B);
+      have_stand = 1;
+    }
+
+    if (abs(stand_eval) < MATE_BOUND) { // avoid mate positions
+      int margin1 = RAZOR_MARGIN1; // first stage razor, quiesce
+      if (max) {
+        if (stand_eval + margin1 <= alpha) {
+          int q = quiesce(B, max, alpha, beta, info, 0);
+          if (q <= alpha) {
+            B->white = old;
+            return q;
+          }
+        }
+      } else {
+        if (stand_eval - margin1 >= beta) {
+          int q = quiesce(B, max, alpha, beta, info, 0);
+          if (q >= beta) {
+            B->white = old;
+            return q;
+          }
+        }
+      }
+
+      if (depth == 2) { // second stage razor, reduced search
+        int margin2 = RAZOR_MARGIN2;
+        if (max) {
+          if (stand_eval + margin2 <= alpha) {
+            int r = minimax(B, depth - 1, max, alpha, beta, info, ply);
+            if (r <= alpha) {
+              B->white = old;
+              return r;
+            }
+          }
+        } else {
+          if (stand_eval - margin2 >= beta) {
+            int r = minimax(B, depth - 1, max, alpha, beta, info, ply);
+            if (r >= beta) {
+              B->white = old;
+              return r;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (FUT_ENABLED && !pv_node && !in_check && depth <= FUT_NODE_MAX_DEPTH && ply > 0) { // shallow, not check
+    if (!have_stand) {
+      stand_eval = blended_eval(B);
+      have_stand = 1;
+    }
+
+    if (abs(stand_eval) < MATE_BOUND) { // avoid mate positions
       int margin = FUT_BASE_MARGIN * depth;
       if (max) {
-        if (stand_eval + margin <= alpha) { // fail low
+        if (stand_eval + margin <= alpha) { // static + margin <= alpha: fail low
           B->white = old;
           return stand_eval;
         }
       } else {
-        if (stand_eval - margin >= beta) { // fail high
+        if (stand_eval - margin >= beta) { // static - margin >= beta: fail high
           B->white = old;
           return stand_eval;
         }
@@ -143,19 +204,20 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
   }
 
-  int best = max ? INT32_MIN : INT32_MAX;
+  int best = max ? INT32_MIN : INT32_MAX; 
   move_t *moves;
   int move_count = movegen_ply(B, max, 1, ply, &moves, move_stack, MAX_MOVES);
   if (move_count == 0) {
-    int v = check(B, max) ? (max ? -MATE + ply : +MATE - ply) : 0;
+    int in_mate = check(B, !max); // opponent attacking side to move
+    int v = in_mate ? (max ? -MATE + ply : +MATE - ply) : 0;
     B->white = old;
     return v;
   }
   score_moves(B, moves, move_count, max, ply);
 
-  int comp_stand = (FUT_ENABLED && depth <= FUT_MOVE_MAX_DEPTH && !in_check && ply > 0); // lazy stand_eval computation
-  if (comp_stand && stand_eval == 0) {
+  if (FUT_ENABLED && !pv_node && !in_check && depth <= FUT_MOVE_MAX_DEPTH && ply > 0 && !have_stand) {
     stand_eval = blended_eval(B);
+    have_stand = 1;
   }
 
   int i;
@@ -163,11 +225,11 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     undo_t u;
     int cap = is_capture(B, max, &moves[i]);
 
-    if (LMP_ENABLED && !cap && !in_check && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP) { // not check, not root
+    if (LMP_ENABLED && !pv_node && !near_root && !in_check && !cap && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP_BASE + depth) { // not check, not root
       continue; // prune
     }
 
-    if (FUT_ENABLED && depth <= FUT_MOVE_MAX_DEPTH && !in_check && !cap && ply > 0 && i > 0 && comp_stand && abs(stand_eval) < MATE - 2 * QUEEN_VALUE) { // not at root, not first move
+    if (FUT_ENABLED && !pv_node && !in_check && depth <= FUT_MOVE_MAX_DEPTH && !cap && ply > 0 && i > 0 && have_stand && abs(stand_eval) < MATE_BOUND) { // not at root, not first move
       int margin = FUT_MOVE_MARGIN * depth; // move futility pruning
       if (max) {
         if (stand_eval + margin <= alpha) {
@@ -182,41 +244,48 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
 
     make_move(B, &moves[i], max, &u);
     last_move[ply] = moves[i]; // last move
-    int gives_check = check(B, !max);
+    int gives_check = check(B, max);
+
     int eval;
     int lmr = 0;
-    if (LMR_ENABLED && !cap && !gives_check && depth >= LMR_MIN_DEPTH && ply > 0 && i >= LMR_LATE_MOVE_IDX) {
+    if (LMR_ENABLED && !pv_node && depth >= LMR_MIN_DEPTH && ply > 0 && i >= 1 && !cap && !gives_check && !in_check) {
+      int R = LMR_BASE_REDUCTION;
+
+      // move scaling
+      if (depth >= 5) R++;
+      if (i >= 8) R++;
+      if (R > depth - 1) R = depth - 1;
+      int red_depth = depth - 1 - R;
+      if (red_depth < 1) red_depth = 1;
       lmr = 1;
-    }
+      int nalpha = alpha; // reduced search window
+      int nbeta = alpha + 1;
+      if (!max) {
+        nbeta = beta;
+        nalpha = beta - 1;
+      }
 
-    if (!PVS_ENABLED || i == 0) {
-      if (lmr) { // normal alpha-beta w/ lmr
-        int lmr_depth = depth - 1 - LMR_REDUCTION;
-        if (lmr_depth < 1) lmr_depth = 1; // safety
-        eval = minimax(B, lmr_depth, !max, alpha, beta, info, ply + 1);
+      eval = minimax(B, red_depth, !max, nalpha, nbeta, info, ply + 1);
 
-        if ((max && eval > alpha) || (!max && eval < beta)) {
+      if (max ? (eval > alpha) : (eval < beta)) { // re-search full window
+        eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
+      }
+    } else {
+      if (!PVS_ENABLED || i == 0) {
+        eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
+      } else {
+        int pvs_alpha = alpha; // null window
+        int pvs_beta  = alpha + 1;
+        if (!max) {
+          pvs_beta  = beta;
+          pvs_alpha = beta - 1;
+        }
+
+        eval = minimax(B, depth - 1, !max, pvs_alpha, pvs_beta, info, ply + 1);
+
+        if (max ? (eval > alpha && eval < beta) : (eval < beta && eval > alpha)) {
           eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
         }
-      } else { // normal alpha-beta
-        eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
-      }
-    } else { // pvs negascout
-      int search = depth - 1;
-
-      if (lmr) {
-        search -= LMR_REDUCTION;
-        if (search < 1) search = 1;
-      }
-
-      int pvs_alpha = alpha; // null window around alpha
-      int pvs_beta  = alpha + 1;
-      if (pvs_beta > beta) pvs_beta = beta;
-
-      eval = minimax(B, search, !max, pvs_alpha, pvs_beta, info, ply + 1);
-
-      if (eval > alpha && eval < beta) { // re-search full depth
-        eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
       }
     }
 
@@ -295,30 +364,27 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
   }
 
   for (int i = 0; i < n; ++i) {
-    if (FUT_ENABLED || CAPPRUNE_ENABLED) {
+    int piecev = victim_square(B, side, caps[i].to);
+    int valv = (piecev >= 0 ? value(piecev) : 0);
+
+    if (CAPPRUNE_ENABLED && piecev >= 0) {
       int piecea = caps[i].piece;
-      int piecev = victim_square(B, side, caps[i].to);
       int vala = value(piecea);
-      int valv = (piecev >= 0 ? value(piecev) : 0);
 
-      if (CAPPRUNE_ENABLED && piecev >= 0) {
-        if (valv + PAWN_VALUE < vala) {
-          continue; // skip bad trade
-        }
+      if (valv + PAWN_VALUE < vala) { // capture pruning, bad trade
+        continue;
       }
+    }
 
-      if (FUT_ENABLED && DELTA_MARGIN > 0) {
-        int rgain = valv - vala; // best case gain for side
-        int gain = rgain + DELTA_MARGIN;
-
-        if (side) { // max
-          if (stand + gain <= alpha) {
-            continue;
-          }
-        } else { // min
-          if (stand - gain >= beta) {
-            continue;
-          }
+    if (DELTA_PRUNE_ENABLED && DELTA_MARGIN > 0 && piecev >= 0 && abs(stand) < MATE - 2 * QUEEN_VALUE) { // avoid near mate
+      int max_gain = valv; // TODO: add promotion bonus
+      if (side) {
+        if (stand + max_gain + DELTA_MARGIN <= alpha) {
+          continue;
+        }
+      } else {
+        if (stand - max_gain - DELTA_MARGIN >= beta) {
+          continue;
         }
       }
     }
@@ -347,9 +413,9 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
 
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) { // assumes B->white == side and side is in check
   if (ply >= MAX_PLY) return blended_eval(B);
-
   move_t *moves;
   int move_count = movegen_ply(B, side, 1, ply, &moves, move_stack, MAX_MOVES);  // legal moves only
+  int m = 0;
 
   if (move_count == 0) {
     int score = side ? -MATE + ply : +MATE - ply;
@@ -412,6 +478,7 @@ int find_move(bot *bot, int is_white, int limit) {
     for (i = 0; i < move_count; ++i) {
       undo_t u;
       make_move(bot->B, &moves[i], is_white, &u);
+      last_move[0] = moves[i]; // last move
       bot->B->white = !is_white;
       int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 1);
       bot->B->white = is_white;
@@ -444,8 +511,8 @@ int find_move(bot *bot, int is_white, int limit) {
 #ifdef DEBUG
     printf("Depth %d ran in %lf seconds, best move: %d, eval: %d\n", depth, gtime() - start, move, best);
 #endif
-    // printf("Depth %d best: ", depth);
-    // print_move_eval("", move, best);
+    printf("Depth %d best: ", depth);
+    print_move_eval("", move, best);
   }
 end_find:
 #ifdef DEBUG

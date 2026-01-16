@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <assert.h>
 #include "lib/board.h"
 #include "lib/manager.h"
@@ -14,6 +15,18 @@ static inline int lsb(uint64_t x) {
     abort();
   } */
   return __builtin_ctzll(x);
+}
+
+static inline int fen_index(char c) {
+  switch (tolower((unsigned char) c)) {
+    case 'p': return PAWN;
+    case 'n': return KNIGHT;
+    case 'b': return BISHOP;
+    case 'r': return ROOK;
+    case 'q': return QUEEN;
+    case 'k': return KING;
+    default:  return -1;
+  }
 }
 
 board *init_board(void) {
@@ -106,6 +119,82 @@ board *preset_board(uint64_t wpawns, uint64_t bpawns, uint64_t wknights, uint64_
   init_jump_table(B->jumps);
   
   return B;
+}
+
+int load_fen(board *B, const char *fen) {
+  if (!B || !fen) return 0;
+
+  uint64_t W[NUM_PIECES], Bl[NUM_PIECES];
+  memset(W, 0, sizeof(W));
+  memset(Bl, 0, sizeof(Bl));
+
+  int rank = 7; // rank 8 start
+  int file = 0;
+
+  const char *p = fen;
+
+  while (*p && *p != ' ') {
+    char c = *p++;
+
+    if (c == '/') {
+      if (file != 8) return 0;
+      --rank;
+      file = 0;
+      if (rank < 0) return 0;
+      continue;
+    }
+
+    if (c >= '1' && c <= '8') {
+      file += (c - '0');
+      if (file > 8) return 0;
+      continue;
+    }
+
+    int pi = fen_index(c);
+    if (pi < 0) return 0;
+    if (file >= 8 || rank < 0) return 0;
+
+    int sq = rank * 8 + file;  // A1=0
+    uint64_t mask = 1ULL << sq;
+
+    if (isupper((unsigned char)c)) W[pi] |= mask;  // White
+    else Bl[pi] |= mask; // Black
+
+    file++;
+  }
+
+  if (rank != 0 || file != 8) return 0; // must end at rank 1
+  while (*p == ' ') p++;
+
+  int white = 1;
+  if (*p == 'w') white = 1;
+  else if (*p == 'b') white = 0;
+  else return 0;
+
+  while (*p && *p != ' ') p++;
+  while (*p == ' ') p++;
+
+  uint8_t castle = 0; // castling
+  if (*p == '-') {
+    ++p;
+  } else {
+    while (*p && *p != ' ') {
+      switch (*p) {
+        case 'K': castle |= WKS; break;
+        case 'Q': castle |= WQS; break;
+        case 'k': castle |= BKS; break;
+        case 'q': castle |= BQS; break;
+        default: return 0;
+      }
+      p++;
+    }
+  }
+
+  if (!W[KING] || (W[KING] & (W[KING] - 1))) return 0;
+  if (!Bl[KING] || (Bl[KING] & (Bl[KING] - 1))) return 0;
+
+  load_position(B, W, Bl, white, castle, 0); // cc = 0
+  return 1;
 }
 
 uint64_t white_moves(const board *B) {
@@ -889,7 +978,7 @@ void restore_snapshot(board *B, const board_snapshot *S) {
   B->cc = S->cc;
 }
 
-int check(const board *B, int side) {
+int check(const board *B, int side) { // side puts opponent in check
   uint64_t all = B->whites | B->blacks;
   uint64_t k = side ? B->BLACK[KING] : B->WHITE[KING];
   int ksq = lsb(k);

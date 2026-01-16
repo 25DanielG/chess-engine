@@ -100,6 +100,7 @@ static inline int encode_move(move_t m) { return m.from * 64 + m.to; }
 
 board *init_board(void);
 board *preset_board(uint64_t wpawns, uint64_t bpawns, uint64_t wknights, uint64_t bknights, uint64_t wbishops, uint64_t bbishops, uint64_t wrooks, uint64_t brooks, uint64_t wqueens, uint64_t bqueens, uint64_t wkings, uint64_t bkings, uint8_t castling, uint8_t complete);
+int load_fen(board *B, const char *fen);
 uint64_t white_moves(const board *B);
 uint64_t black_moves(const board *B);
 uint64_t wp_moves(uint64_t p, uint64_t w, uint64_t b);

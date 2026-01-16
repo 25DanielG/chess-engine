@@ -14,30 +14,40 @@
 #define MAX_QPLY (16)
 #define NONE_PIECE (255)
 #define MAX_MOVES (256)
-#define MAX_PV 128
+#define MAX_PV (128)
+
+#define ROOT_QUIESCENCE_ENABLED (1)
 
 #define LMR_ENABLED (1)
 #define LMR_MIN_DEPTH (3)
-#define LMR_LATE_MOVE_IDX (3) // reduce from 4th move and on
-#define LMR_REDUCTION (1)
+#define LMR_BASE_REDUCTION (1)
 
 #define NMP_ENABLED (1)
 #define NMP_MIN_DEPTH (3)
-#define NMP_REDUCTION (2) // nmp depth reduction
+#define NMP_BASE_REDUCTION (2)
+#define NMP_EXTRA_REDUCTION(depth) ((depth) / 3)
+#define NMP_MARGIN (2 * PAWN_VALUE) // stand eval above beta by margin
 
 #define LMP_ENABLED (1)
 #define LMP_MAX_DEPTH (3) // only shallow depth
-#define LMP_SKIP (8) // skip quiet moves after 8th
+#define LMP_SKIP_BASE (3) // skip quiet moves after 8th
 
 #define FUT_ENABLED (0)
 #define FUT_NODE_MAX_DEPTH (2) // depth <= []
-#define FUT_BASE_MARGIN (150) // base fut margin
-#define FUT_PHASE_SCALE (0)
-#define FUT_MOVE_MAX_DEPTH (2)
-#define FUT_MOVE_MARGIN 120 // quite move margin
-#define DELTA_MARGIN (80) // allowed material swing
+#define FUT_BASE_MARGIN (2 * PAWN_VALUE) // base fut margin
+#define FUT_MOVE_MAX_DEPTH (3)
+#define FUT_MOVE_MARGIN (1 * PAWN_VALUE) // quite move margin
+
+#define DELTA_PRUNE_ENABLED (1)
+#define DELTA_MARGIN (1 * PAWN_VALUE)
+
+#define RAZOR_ENABLED (1)
+#define RAZOR_MAX_DEPTH (2) // only depth 1–2
+#define RAZOR_MARGIN1 (1 * PAWN_VALUE) // first stage
+#define RAZOR_MARGIN2 (2 * PAWN_VALUE)
 
 #define PVS_ENABLED (1)
+#define WINDOW_IS_PV(alpha, beta) ((beta) - (alpha) > 1)
 
 #define CAPPRUNE_ENABLED (1) // quiescence capture pruning
 

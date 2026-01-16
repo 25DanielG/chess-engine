@@ -13,7 +13,7 @@
 // CONFIG
 
 #define GRAPHICS (1) // graphics
-#define OPENING_BOOK (1) // opening book usage
+#define OPENING_BOOK (0) // opening book usage
 #define WHITE_BOT (0)
 #define BLACK_BOT (1)
 #define WHITE_DEPTH (15)
@@ -34,6 +34,6 @@ void out(board *B, int mode); // 0 letter, 1 piece
 int parse(const char *input, int *from, int *to);
 int execute(board *B, int from, int to, int *white);
 uint64_t imove(int piece, uint64_t from_mask, board *B, int *white);
-void test_position(board *B);
+void test_position(board *B, char *fen);
 void add_history(int pt, int from, int to, int capture);
 void free_history(void);

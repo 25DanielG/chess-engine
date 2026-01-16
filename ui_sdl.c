@@ -155,7 +155,8 @@ int run_sdl(void) {
   printf("Initialized attack & pesto tables and opening book.\n");
 #endif
   board* B = init_board();
-  // test_position(B); // for testing hardcoded positions
+  // test_position(B, "3q1rk1/2ppbppp/1p6/1N2Qp2/1P6/3B4/rB1P1PPP/n2K2NR b K - 0 1"); // for testing hardcoded positions
+  test_position(B, "3q1rk1/2pp1ppp/1p3b2/1N3Q2/1P6/3B4/rB1P1PPP/n2K2NR b - - 0 2"); // for testing hardcoded positions
   bot *bwhite = NULL, *bblack = NULL;
   if (WHITE_BOT)
     bwhite = init_bot(B, 1, WHITE_DEPTH, WHITE_LIMIT);
