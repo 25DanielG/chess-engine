@@ -12,6 +12,8 @@
 
 move_t pv_table[MAX_PLY][MAX_PLY];
 int pv_length[MAX_PLY];
+move_t best_pv[MAX_PLY];
+int best_pv_len = 0;
 
 move_t move_stack[MAX_PLY][MAX_MOVES];
 move_t qmove_stack[MAX_QPLY][MAX_MOVES];
@@ -290,22 +292,30 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
 
     unmake_move(B, &moves[i], max, &u);
-    int improve = (max ? (eval > best) : (eval < best));
+    int better = (max ? (eval > best) : (eval < best));
 
-    if (max) {
-      if (eval > best) best = eval;
-      if (eval > alpha) alpha = eval;
-    } else {
-      if (eval < best) best = eval;
-      if (eval < beta)  beta  = eval;
-    }
+    if (better) {
+      best = eval;
 
-    if (improve && ply < MAX_PLY) {
-      pv_table[ply][ply] = moves[i];
+      if (max) {
+        if (best > alpha) alpha = best;
+      } else {
+        if (best < beta) beta = best;
+      }
+
+      pv_table[ply][0] = moves[i];
       int clen = pv_length[ply + 1];
+      if (clen > MAX_PLY - 1) clen = MAX_PLY - 1;
       for (int k = 0; k < clen; ++k)
-        pv_table[ply][ply + 1 + k] = pv_table[ply + 1][ply + 1 + k];
-      pv_length[ply] = clen + 1;
+        pv_table[ply][1 + k] = pv_table[ply + 1][k];
+      pv_length[ply] = 1 + clen;
+    } else {
+      if (max) {
+        if (eval > alpha) alpha = eval;
+      }
+      else {
+        if (eval < beta) beta = eval;
+      }
     }
 
     if (beta <= alpha) {
@@ -488,12 +498,13 @@ int find_move(bot *bot, int is_white, int limit) {
         lbest = eval;
         lmove = packed;
 
-        pv_table[0][0] = moves[i]; // root move
-        int clen = pv_length[1]; // PV
-        for (int k = 0; k < clen; ++k) {
-          pv_table[0][k + 1] = pv_table[1][k + 1];
-        }
-        pv_length[0] = clen + 1;
+        pv_table[0][0] = moves[i];
+        int clen = pv_length[1];
+        if (clen > MAX_PLY - 1)
+          clen = MAX_PLY - 1;
+        for (int k = 0; k < clen; ++k)
+          pv_table[0][1 + k] = pv_table[1][k];
+        pv_length[0] = 1 + clen;
       }
       if (time_over()) {
 #ifdef DEBUG
@@ -503,11 +514,17 @@ int find_move(bot *bot, int is_white, int limit) {
           move = lmove;
           best = lbest;
         }
+        pv_length[0] = best_pv_len;
+        for (int k = 0; k < best_pv_len; ++k)
+          pv_table[0][k] = best_pv[k];
         goto end_find;
       }
     }
     best = lbest;
     move = lmove;
+    best_pv_len = pv_length[0]; // save pv line
+    for (int k = 0; k < best_pv_len; ++k)
+      best_pv[k] = pv_table[0][k];
 #ifdef DEBUG
     printf("Depth %d ran in %lf seconds, best move: %d, eval: %d\n", depth, gtime() - start, move, best);
 #endif
@@ -524,7 +541,7 @@ end_find:
   printf("Main PV line: ");
     for (int i = 0; i < pv_length[0]; ++i) {
       int from = pv_table[0][i].from;
-      int to   = pv_table[0][i].to;
+      int to = pv_table[0][i].to;
       printf("%c%c%c%c", 'a' + (from % 8), '1' + (from / 8), 'a' + (to   % 8), '1' + (to   / 8));
       if (i < pv_length[0] - 1) printf(" ");
     }
