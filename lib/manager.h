@@ -13,7 +13,7 @@
 // CONFIG
 
 #define GRAPHICS (1) // graphics
-#define OPENING_BOOK (0) // opening book usage
+#define OPENING_BOOK (1) // opening book usage
 #define WHITE_BOT (0)
 #define BLACK_BOT (1)
 #define WHITE_DEPTH (15)

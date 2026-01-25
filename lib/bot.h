@@ -5,9 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "board.h"
+#include "tt.h"
 
 #define BOARD_SIZE (64)
 #define MATE (32000)
+
+#define TT_ENABLED (1)
+#define TT_SIZE_MB (64)  // size in MB
 #define OUTPUT_LINES (1)
 #define NODE_CHECK (2047)
 #define MAX_PLY (128)
@@ -90,4 +94,4 @@ int find_move(bot *bot, int is_white, int limit);
 static inline int is_capture(const board *B, int side_to_move, const move_t *m);
 static inline int victim_square(const board *B, int side_to_move, int sq);
 static void move_sort(move_t *mv, int n);
-static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply);
+static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply, uint16_t tt_move);

@@ -9,6 +9,7 @@
 #include "lib/manager.h"
 #include "lib/eval.h"
 #include "lib/utils.h"
+#include "lib/tt.h"
 
 move_t pv_table[MAX_PLY][MAX_PLY];
 int pv_length[MAX_PLY];
@@ -86,6 +87,20 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   if (time_over()) return blended_eval(B);
   int old = B->white;
   B->white = max;
+
+  uint64_t hash = 0; // TT
+  uint16_t tt_move = 0;
+  int tt_score = 0;
+  int orig_alpha = alpha;
+
+  if (TT_ENABLED && g_tt) {
+    hash = hash_board(B);
+    if (tt_probe(g_tt, hash, depth, alpha, beta, &tt_score, &tt_move, ply)) {
+      B->white = old; // TT hit
+      return tt_score;
+    }
+  }
+
   if (depth == 0) {
     int ch = check(B, !max);
     if (ch) {
@@ -206,7 +221,8 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
   }
 
-  int best = max ? INT32_MIN : INT32_MAX; 
+  int best = max ? INT32_MIN : INT32_MAX;
+  move_t best_move = { .from = 255, .to = 255, .piece = 255, .promo = 0 };
   move_t *moves;
   int move_count = movegen_ply(B, max, 1, ply, &moves, move_stack, MAX_MOVES);
   if (move_count == 0) {
@@ -215,7 +231,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     B->white = old;
     return v;
   }
-  score_moves(B, moves, move_count, max, ply);
+  score_moves(B, moves, move_count, max, ply, tt_move);
 
   if (FUT_ENABLED && !pv_node && !in_check && depth <= FUT_MOVE_MAX_DEPTH && ply > 0 && !have_stand) {
     stand_eval = blended_eval(B);
@@ -296,6 +312,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
 
     if (better) {
       best = eval;
+      best_move = moves[i];  // track best move for TT
 
       if (max) {
         if (best > alpha) alpha = best;
@@ -334,9 +351,24 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
           }
         }
       }
+      best_move = moves[i];  // cutoff move is best for TT
       break;
     }
   }
+
+  if (TT_ENABLED && g_tt && best_move.from != 255) { // store TT
+    tt_flag_t flag;
+    if (best <= orig_alpha) {
+      flag = TT_UPPER;  // fail-low higher bound
+    } else if (best >= beta) {
+      flag = TT_LOWER;  // fail-high lower bound
+    } else {
+      flag = TT_EXACT;  // PV node exact score
+    }
+    uint16_t encoded = tt_encode_move(best_move.from, best_move.to, best_move.promo);
+    tt_store(g_tt, hash, depth, best, flag, encoded, ply);
+  }
+
   B->white = old;
   return best;
 }
@@ -463,6 +495,13 @@ int find_move(bot *bot, int is_white, int limit) {
   for (int i = 0; i < MAX_PLY; ++i) {
     pv_length[i] = 0;
   }
+
+  if (TT_ENABLED && !g_tt) {
+    g_tt = tt_create(TT_SIZE_MB);
+  }
+  if (TT_ENABLED && g_tt) {
+    tt_new_search(g_tt);  // increase age
+  }
 #ifdef DEBUG
   printf("-------------STATS-------------\n");
   double debug_start = clock();
@@ -576,9 +615,14 @@ static void move_sort(move_t *mv, int n) {
   }
 }
 
-static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply) {
+static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int ply, uint16_t tt_move) {
   move_t prev = { .from = 255 }; // prev move
   move_t cm = { .from = 255 };
+
+  int tt_from = -1, tt_to = -1, tt_promo = 0; // decode TT
+  if (tt_move != 0) {
+    tt_decode_move(tt_move, &tt_from, &tt_to, &tt_promo);
+  }
 
   if (ply > 0) {
     prev = last_move[ply - 1];
@@ -590,7 +634,10 @@ static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int
 
   for (int i = 0; i < n; ++i) {
     int score = 0;
-    if (is_capture(B, side_to_move, &mv[i])) { // mvvlva
+
+    if (tt_move != 0 && mv[i].from == tt_from && mv[i].to == tt_to) { // prioritize TT move
+      score = (1 << 24);  // highest
+    } else if (is_capture(B, side_to_move, &mv[i])) { // mvvlva
       int vic = victim_square(B, side_to_move, mv[i].to);
       score = (1 << 22) + (vic >= 0 ? mvv_lva[vic][mv[i].piece] : 0);
     } else {
