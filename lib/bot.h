@@ -6,6 +6,7 @@
 #include <string.h>
 #include "board.h"
 #include "tt.h"
+#include "see.h"
 
 #define BOARD_SIZE (64)
 #define MATE (32000)
@@ -43,7 +44,7 @@
 #define FUT_MOVE_MARGIN (1 * PAWN_VALUE) // quite move margin
 
 #define DELTA_PRUNE_ENABLED (1)
-#define DELTA_MARGIN (1 * PAWN_VALUE)
+#define DELTA_MARGIN SEE_PAWN // delta margin in centipawns
 
 #define RAZOR_ENABLED (1)
 #define RAZOR_MAX_DEPTH (2) // only depth 1–2
@@ -54,6 +55,12 @@
 #define WINDOW_IS_PV(alpha, beta) ((beta) - (alpha) > 1)
 
 #define CAPPRUNE_ENABLED (1) // quiescence capture pruning
+
+#define CHECK_EXTENSION_ENABLED (1)
+#define CHECK_EXTENSION (1) // extend by 1 ply
+
+#define SEE_PRUNE_DEPTH (3) // prune bad captures to depth
+#define SEE_PRUNE_MARGIN SEE_PAWN // prune if SEE < -margin * depth
 
 struct bot_header {
   board *B;

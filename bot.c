@@ -10,6 +10,7 @@
 #include "lib/eval.h"
 #include "lib/utils.h"
 #include "lib/tt.h"
+#include "lib/see.h"
 
 move_t pv_table[MAX_PLY][MAX_PLY];
 int pv_length[MAX_PLY];
@@ -243,6 +244,15 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     undo_t u;
     int cap = is_capture(B, max, &moves[i]);
 
+    // SEE pruning for bad captures, low depths, no PV, prunes losing captures
+    if (cap && !pv_node && !in_check && depth <= SEE_PRUNE_DEPTH && ply > 0 && i > 0) {
+      // if SEE < -margin * depth prune
+      int see_threshold = -SEE_PRUNE_MARGIN * depth;
+      if (!see_ge(B, &moves[i], max, see_threshold)) {
+        continue; // bad capture, prune
+      }
+    }
+
     if (LMP_ENABLED && !pv_node && !near_root && !in_check && !cap && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP_BASE + depth) { // not check, not root
       continue; // prune
     }
@@ -260,20 +270,30 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       }
     }
 
+    int is_good_capture = cap && see_ge(B, &moves[i], max, 0); // good capture if SEE >= 0
+
     make_move(B, &moves[i], max, &u);
     last_move[ply] = moves[i]; // last move
     int gives_check = check(B, max);
 
+    // extend ply when move gives check
+    int extension = 0;
+    if (CHECK_EXTENSION_ENABLED && gives_check) {
+      extension = CHECK_EXTENSION;
+    }
+
+    int new_depth = depth - 1 + extension;
     int eval;
     int lmr = 0;
-    if (LMR_ENABLED && !pv_node && depth >= LMR_MIN_DEPTH && ply > 0 && i >= 1 && !cap && !gives_check && !in_check) {
+
+    if (LMR_ENABLED && !pv_node && depth >= LMR_MIN_DEPTH && ply > 0 && i >= 1 && !is_good_capture && !gives_check && !in_check) {
       int R = LMR_BASE_REDUCTION;
 
       // move scaling
       if (depth >= 5) R++;
       if (i >= 8) R++;
-      if (R > depth - 1) R = depth - 1;
-      int red_depth = depth - 1 - R;
+      if (R > new_depth) R = new_depth;
+      int red_depth = new_depth - R;
       if (red_depth < 1) red_depth = 1;
       lmr = 1;
       int nalpha = alpha; // reduced search window
@@ -286,11 +306,11 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       eval = minimax(B, red_depth, !max, nalpha, nbeta, info, ply + 1);
 
       if (max ? (eval > alpha) : (eval < beta)) { // re-search full window
-        eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
+        eval = minimax(B, new_depth, !max, alpha, beta, info, ply + 1);
       }
     } else {
       if (!PVS_ENABLED || i == 0) {
-        eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
+        eval = minimax(B, new_depth, !max, alpha, beta, info, ply + 1);
       } else {
         int pvs_alpha = alpha; // null window
         int pvs_beta  = alpha + 1;
@@ -299,10 +319,10 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
           pvs_alpha = beta - 1;
         }
 
-        eval = minimax(B, depth - 1, !max, pvs_alpha, pvs_beta, info, ply + 1);
+        eval = minimax(B, new_depth, !max, pvs_alpha, pvs_beta, info, ply + 1);
 
         if (max ? (eval > alpha && eval < beta) : (eval < beta && eval > alpha)) {
-          eval = minimax(B, depth - 1, !max, alpha, beta, info, ply + 1);
+          eval = minimax(B, new_depth, !max, alpha, beta, info, ply + 1);
         }
       }
     }
@@ -397,29 +417,45 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
   move_t* mv;
   int mcount = movegen_ply(B, side, 0, qply, &mv, qmove_stack, MAX_MOVES); // pseudo legal
 
-  // filter captures
+  // filter captures and score by SEE for ordering
   for (int i = 0; i < mcount; ++i) {
     uint64_t to_mask = 1ULL << mv[i].to;
     int is_cap = side ? ((B->blacks & to_mask) != 0) : ((B->whites & to_mask) != 0);
-    if (is_cap) caps[n++] = mv[i];
+    if (is_cap) {
+      // score by SEE value, mvvlva fallback
+      int vic = victim_square(B, side, mv[i].to);
+      int vic_val = (vic >= 0 ? see_value(vic) : 0);
+      int atk_val = see_value(mv[i].piece);
+
+      mv[i].order = vic_val * 16 - atk_val;
+      caps[n++] = mv[i];
+    }
     if (n == MAX_MOVES) break;
   }
 
+  move_sort(caps, n);
+
   for (int i = 0; i < n; ++i) {
     int piecev = victim_square(B, side, caps[i].to);
-    int valv = (piecev >= 0 ? value(piecev) : 0);
+    int valv = (piecev >= 0 ? see_value(piecev) : 0);
 
-    if (CAPPRUNE_ENABLED && piecev >= 0) {
-      int piecea = caps[i].piece;
-      int vala = value(piecea);
-
-      if (valv + PAWN_VALUE < vala) { // capture pruning, bad trade
-        continue;
+    if (CAPPRUNE_ENABLED && piecev >= 0) { // skip captures that lose material
+      if (!see_ge(B, &caps[i], side, 0)) {
+        continue; // prune losing capture
       }
     }
 
-    if (DELTA_PRUNE_ENABLED && DELTA_MARGIN > 0 && piecev >= 0 && abs(stand) < MATE - 2 * QUEEN_VALUE) { // avoid near mate
-      int max_gain = valv; // TODO: add promotion bonus
+    // best possible capture wont raise alpha
+    if (DELTA_PRUNE_ENABLED && DELTA_MARGIN > 0 && piecev >= 0 && abs(stand) < MATE - 2 * QUEEN_VALUE) {
+      int max_gain = valv;
+
+      if (caps[i].piece == PAWN) {
+        uint64_t to_mask = 1ULL << caps[i].to;
+        if ((side && (to_mask & RANK_8)) || (!side && (to_mask & RANK_1))) {
+          max_gain += SEE_QUEEN - SEE_PAWN; // promotion bonus
+        }
+      }
+
       if (side) {
         if (stand + max_gain + DELTA_MARGIN <= alpha) {
           continue;
@@ -637,9 +673,19 @@ static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int
 
     if (tt_move != 0 && mv[i].from == tt_from && mv[i].to == tt_to) { // prioritize TT move
       score = (1 << 24);  // highest
-    } else if (is_capture(B, side_to_move, &mv[i])) { // mvvlva
-      int vic = victim_square(B, side_to_move, mv[i].to);
-      score = (1 << 22) + (vic >= 0 ? mvv_lva[vic][mv[i].piece] : 0);
+    } else if (is_capture(B, side_to_move, &mv[i])) {
+      // SEE, winning/equal captures high, losing captures low
+      int see_score = see(B, &mv[i], side_to_move);
+
+      if (see_score >= 0) {
+        int vic = victim_square(B, side_to_move, mv[i].to);
+        int mvvlva_bonus = (vic >= 0 ? mvv_lva[vic][mv[i].piece] : 0); // mvvlva tie breaker
+        score = (1 << 23) + see_score + mvvlva_bonus;
+      } else {
+        int vic = victim_square(B, side_to_move, mv[i].to);
+        int mvvlva_bonus = (vic >= 0 ? mvv_lva[vic][mv[i].piece] : 0);
+        score = (1 << 17) + mvvlva_bonus + see_score; // see_score negative
+      }
     } else {
       // killers
       if (equals(killer1[ply], mv[i])) score = (1 << 21);

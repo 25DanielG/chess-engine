@@ -9,12 +9,16 @@
 - Quiescence search on captures (`quiesce`)
 - Iterative deepening with hard time cut (`find_move`)
 - Move ordering: MVV-LVA, two killer moves per ply, and history heuristic (`score_moves`)
+- Static exchange evaluation
 - Late-move reduction for quiet and late moves
 - Late-move pruning
 - Quiescence capture pruning
 - Null-move pruning
+- Check extensions
+- Transposition table
 - Principle variation search / Negascout
 - Futility pruning: node futility at shallow depth, move-based futility for quiet late moves, delta-like futility in quiescence
+- Razoring (forward pruning, search at reduced depth before searching at a full depth)
 - Pseudo-legal movegen + legality checks + checkmate/stalemate scoring
 - Snapshot-based + undoable bitboard for move execution
 - Magic bitboard for fast sliding move generation
