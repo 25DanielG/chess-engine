@@ -144,8 +144,9 @@ int see(const board *B, const move_t *m, int side) { // full static exchange eva
   }
 
   // negamax the swap list
-  while (--depth) {
-    gain[depth - 1] = -(-gain[depth - 1] > gain[depth] ? -gain[depth - 1] : gain[depth]);
+  while (depth > 0) {
+    depth--;
+    gain[depth] = -(-gain[depth] > gain[depth + 1] ? -gain[depth] : gain[depth + 1]);
   }
 
   return gain[0];

@@ -219,7 +219,7 @@ int blended_eval(const board *B) {
   int dev = development(B);
 
   // feature sums
-  int mg_feats = (MOBILITY_MG * mob) + (CENTER_MG * ctr) + (KING_SAFETY_MG * ks) + (CASTLE_PT * castle) + (DEV_MG * dev);;
+  int mg_feats = (MOBILITY_MG * mob) + (CENTER_MG * ctr) + (KING_SAFETY_MG * ks) + castle + (DEV_MG * dev);
   int eg_feats = (MOBILITY_EG * mob) + (CENTER_EG * ctr) + (KING_ACTIVITY_EG * ka) + (PSTRUCT_EG * pstr) + (PASSED_EG * pps);
 
   int mg_total = mg_psqt + mg_feats;
