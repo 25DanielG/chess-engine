@@ -177,12 +177,16 @@ int see_ge(const board *B, const move_t *m, int side, int threshold) { // optimi
   uint64_t queens = B->WHITE[QUEEN] | B->BLACK[QUEEN];
 
   int stm = !side;
-  int result = 1; // assume success
 
   while (1) {
     uint64_t stm_attackers = attackers & (stm ? B->whites : B->blacks);
 
-    if (!stm_attackers) break;
+    if (!stm_attackers) { // prev side wins exchange
+      // if stm == side, opp wins return 0
+      // if stm != side, we win return 1
+      return stm != side;
+    }
+
     int atk_sq = -1;
     int atk_piece = -1;
     uint64_t *pieces = stm ? B->WHITE : B->BLACK;
@@ -196,10 +200,14 @@ int see_ge(const board *B, const move_t *m, int side, int threshold) { // optimi
       }
     }
 
-    if (atk_piece < 0) break;
+    if (atk_piece < 0) {
+      return stm != side;
+    }
 
     if (atk_piece == KING) {
-      if (attackers & (stm ? B->blacks : B->whites)) break;
+      if (attackers & (stm ? B->blacks : B->whites)) {
+        return stm != side;
+      }
     }
 
     occ ^= (1ULL << atk_sq);
@@ -215,13 +223,10 @@ int see_ge(const board *B, const move_t *m, int side, int threshold) { // optimi
     stm = !stm;
     balance = -balance - 1 - SEE_VALUES[atk_piece];
 
-    if (balance >= 0) { // negamax pruning
-      result = stm == side;
-      break;
+    if (balance >= 0) { // negamax pruning, cur side at threshold
+      return stm == side;
     }
   }
-
-  return result;
 }
 
 int see_value(int piece) {

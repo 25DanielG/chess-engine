@@ -346,13 +346,6 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       for (int k = 0; k < clen; ++k)
         pv_table[ply][1 + k] = pv_table[ply + 1][k];
       pv_length[ply] = 1 + clen;
-    } else {
-      if (max) {
-        if (eval > alpha) alpha = eval;
-      }
-      else {
-        if (eval < beta) beta = eval;
-      }
     }
 
     if (beta <= alpha) {
