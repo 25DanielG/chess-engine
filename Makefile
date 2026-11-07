@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -I.
+CFLAGS = -I. -O2
 CCD = $(CC) -DDEBUG -g -fsanitize=address
 SDL = `pkg-config --cflags --libs sdl2 SDL2_image`
 
@@ -40,6 +40,10 @@ test-bin: $(FILES) $(MAIN)
 	  -DMAX_GAME_PLIES=$(TEST_PLIES) \
 	  -DOPENING_BOOK=0 \
 	  $(FILES) $(MAIN) $(SDL) -o $(BUILD)/test_engine
+
+uci: $(FILES) src/app/uci.c
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) $(FILES) src/app/uci.c $(SDL) -o $(BUILD)/uci
 
 clean:
 	@rm -rf $(BUILD) a.out test_engine *.dSYM *~
