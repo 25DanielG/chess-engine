@@ -544,10 +544,16 @@ int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) {
   return best;
 }
 
+int bot_verbose = 1;
+
 int find_move(bot *bot, int is_white, int limit) {
+  return find_move_ms(bot, is_white, limit * 1000);
+}
+
+int find_move_ms(bot *bot, int is_white, int limit_ms) {
   long *info;
   double start = gtime();
-  deadline = start + limit;
+  deadline = start + limit_ms / 1000.0;
   time_flag = 0;
   init_ordering_tables();
   for (int i = 0; i < MAX_PLY; ++i) {
@@ -565,7 +571,7 @@ int find_move(bot *bot, int is_white, int limit) {
 #ifdef DEBUG
   printf("-------------STATS-------------\n");
   double debug_start = clock();
-  printf("Minimax started with limit %d seconds\n", limit);
+  printf("Minimax started with limit %d ms\n", limit_ms);
   info = (long*)calloc(sizeof(long), 3);
   if (!info) {
     fprintf(stderr, "Alloc failed\n");
@@ -693,8 +699,10 @@ asp_retry:
 #ifdef DEBUG
     printf("Depth %d ran in %lf seconds, best move: %d, eval: %d\n", depth, gtime() - start, move, best);
 #endif
-    printf("Depth %d best: ", depth);
-    print_move_eval("", move, best);
+    if (bot_verbose) {
+      printf("Depth %d best: ", depth);
+      print_move_eval("", move, best);
+    }
   }
 end_find:
 #ifdef DEBUG

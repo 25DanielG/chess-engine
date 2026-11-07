@@ -27,7 +27,7 @@ tt_table_t *tt_create(size_t size_mb) {
   }
 
   size_t actual_mb = (tt->num_buckets * sizeof(tt_bucket_t)) / (1024 * 1024);
-  printf("TT: allocated %zu MB (%llu buckets, %d entries/bucket)\n", actual_mb, (unsigned long long)tt->num_buckets, TT_BUCKET_SIZE);
+  fprintf(stderr, "TT: allocated %zu MB (%llu buckets, %d entries/bucket)\n", actual_mb, (unsigned long long)tt->num_buckets, TT_BUCKET_SIZE);
   return tt;
 }
 

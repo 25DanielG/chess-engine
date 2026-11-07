@@ -8,3 +8,4 @@ chess
 .context/
 test_engine
 __pycache__/
+build/

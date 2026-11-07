@@ -105,7 +105,9 @@ double gtime(void);
 int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int ply);
 int quiesce(board *B, int side, int alpha, int beta, long *info, int qply);
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply);
-int find_move(bot *bot, int is_white, int limit);
+int find_move(bot *bot, int is_white, int limit); // limit in seconds
+int find_move_ms(bot *bot, int is_white, int limit_ms);
+extern int bot_verbose;
 static inline int is_capture(const board *B, int side_to_move, const move_t *m);
 static inline int victim_square(const board *B, int side_to_move, int sq);
 static void move_sort(move_t *mv, int n);
