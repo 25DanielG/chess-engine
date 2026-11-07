@@ -4,6 +4,13 @@
 ### Graphics
 - SDL chess board graphics
 
+### ELO
+ELO referee system in `tools/referee.py`. Must specify two binary paths and call the file like `python3 tools/referee.py build/uci /opt/homebrew/bin/stockfish --games 100 --movetime 100 --opponent-elo 2000`.
+Current results:
+- 7/1/2 WDL against Stockfish 18 2000 ELO
+- 4/0/6 WDL against Stockfish 18 2500 ELO
+- Projected 2430 ELO
+
 ### Engine
 - Minimax with alpha–beta pruning (`minimax`)
 - Quiescence search on captures (`quiesce`)
