@@ -118,29 +118,59 @@ static int piece_sdlkey(SDL_Keycode key) {
   }
 }
 
-static int sdl_prompt_promotion(SDL_Window* W) {
-  SDL_ShowSimpleMessageBox(
-    SDL_MESSAGEBOX_INFORMATION,
-    "Promotion",
-    "Promote to q , r, b, or n",
-    W
-  );
+static const int PROMO_CHOICES[4] = { QUEEN, KNIGHT, ROOK, BISHOP };
 
-  SDL_Event e;
-  while (SDL_WaitEvent(&e)) {
-    if (e.type == SDL_QUIT) {
-      return QUEEN; // default if close window
-    }
-    if (e.type == SDL_KEYDOWN) {
-      SDL_Keycode key = e.key.keysym.sym;
-      if (key >= 'A' && key <= 'Z') key = key - 'A' + 'a';
+static int promo_choice_square(int side, int to, int i) { // choice i sits i squares back
+  return side ? to - 8 * i : to + 8 * i;
+}
 
-      int p = piece_sdlkey(key);
-      if (p != -1) return p;
+static int sdl_prompt_promotion(SDL_Renderer* R, SDL_Texture* tex[TEX_COUNT], board* B, int side, int to) {
+  int hover = -1;
+
+  while (true) {
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+      if (e.type == SDL_QUIT) {
+        SDL_PushEvent(&e);
+        return QUEEN;
+      }
+      if (e.type == SDL_KEYDOWN) {
+        int p = piece_sdlkey(e.key.keysym.sym);
+        if (p != -1) return p;
+      }
+      int r, f;
+      if (e.type == SDL_MOUSEMOTION) {
+        hover = rank_pixel(e.motion.x, e.motion.y, &r, &f) ? index_rank(r, f) : -1;
+      } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT &&
+                 rank_pixel(e.button.x, e.button.y, &r, &f)) {
+        for (int i = 0; i < 4; ++i)
+          if (promo_choice_square(side, to, i) == index_rank(r, f))
+            return PROMO_CHOICES[i];
+      }
     }
+
+    // board with a dim overlay, the four choices in a column
+    SDL_SetRenderDrawColor(R, 30, 30, 30, 255);
+    SDL_RenderClear(R);
+    draw_board(R);
+    draw_pieces(R, B, tex);
+    SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(R, 0, 0, 0, 140);
+    SDL_Rect all = { MARGIN, MARGIN, BOARD_PIX, BOARD_PIX };
+    SDL_RenderFillRect(R, &all);
+    SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_NONE);
+
+    for (int i = 0; i < 4; ++i) {
+      int sq = promo_choice_square(side, to, i);
+      SDL_Rect dst = { MARGIN + (sq % 8) * TILE, MARGIN + (7 - sq / 8) * TILE, TILE, TILE };
+      SDL_SetRenderDrawColor(R, 238, 238, 238, 255);
+      SDL_RenderFillRect(R, &dst);
+      SDL_RenderCopy(R, tex[(side ? wP : bP) + PROMO_CHOICES[i]], NULL, &dst);
+      if (sq == hover)
+        draw_highlight(R, sq, (SDL_Color){ 255, 255, 0, 255 });
+    }
+    SDL_RenderPresent(R);
   }
-
-  return QUEEN;
 }
 
 int run_sdl(void) {
@@ -244,6 +274,8 @@ int run_sdl(void) {
         printf("WHITE_BOT invalid move.\n");
         break;
       }
+      if (promotion_move(1, pt, to))
+        apply_promotion(B, 1, to, (type == 1 && bot_last_promo) ? bot_last_promo : QUEEN);
       add_history(pt, from, to, capture); // track history
       ++ply;
       move = ply / 2;
@@ -299,6 +331,8 @@ int run_sdl(void) {
         printf("BLACK_BOT invalid!\n");
         break;
       }
+      if (promotion_move(0, pt, to))
+        apply_promotion(B, 0, to, (type == 1 && bot_last_promo) ? bot_last_promo : QUEEN);
       add_history(pt, from, to, capture); // track history
       ++ply;
       move = ply / 2;
@@ -350,7 +384,7 @@ int run_sdl(void) {
               int pt = piece_at(B, from);
               if (execute(B, from, to, &B->white)) {
                 if (promotion_move(side, pt, to)) {
-                  int new_piece = sdl_prompt_promotion(W);
+                  int new_piece = sdl_prompt_promotion(R, tex, B, side, to);
                   apply_promotion(B, side, to, new_piece);
                 }
 

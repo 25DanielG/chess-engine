@@ -105,7 +105,7 @@ int run(void) {
 #endif
         if (execute(B, from, to, &B->white)) {
           if (promotion_move(1, pt, to)) { // side is 1
-            int newp = prompt_promotion();
+            int newp = (type == 1 && bot_last_promo) ? bot_last_promo : QUEEN; // bot's choice
             apply_promotion(B, 1, to, newp); // side is 1
           }
 
@@ -153,9 +153,9 @@ int run(void) {
         int pt = piece_at(B, from);
 
         if (execute(B, from, to, &B->white)) {
-          if (promotion_move(0, pt, to)) { // side is 0
+          if (promotion_move(1, pt, to)) { // side is 1
             int newp = prompt_promotion();
-            apply_promotion(B, 0, to, newp); // side is 0
+            apply_promotion(B, 1, to, newp); // side is 1
           }
 
           add_history(pt, from, to, capture); // track history
@@ -205,6 +205,10 @@ int run(void) {
         printf("Move type: %s\n", move_type);
 #endif
         if (execute(B, from, to, &B->white)) {
+          if (promotion_move(0, pt, to)) { // side is 0
+            int newp = (type == 1 && bot_last_promo) ? bot_last_promo : QUEEN; // bot's choice
+            apply_promotion(B, 0, to, newp); // side is 0
+          }
           add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
@@ -245,10 +249,14 @@ int run(void) {
         printf("From: %d, To: %d\n", from, to);
 
         uint64_t to_mask = 1ULL << to;
-        int capture = (B->blacks & to_mask) != 0;
+        int capture = (B->whites & to_mask) != 0;
         int pt = piece_at(B, from);
 
         if (execute(B, from, to, &B->white)) {
+          if (promotion_move(0, pt, to)) { // side is 0
+            int newp = prompt_promotion();
+            apply_promotion(B, 0, to, newp); // side is 0
+          }
           add_history(pt, from, to, capture); // track history
           ++ply;
           move = ply / 2;
@@ -338,6 +346,12 @@ int execute(board *B, int from, int to, int *white) {
 
   int castle = (pt == KING) && (from/8 == to/8) && ( (to - from == 2) || (from - to == 2) );
 
+  if (is_en_passant(B, pt, from, to)) { // remove the pawn captured en passant
+    if (side) B->BLACK[PAWN] &= ~(1ULL << (to - 8));
+    else B->WHITE[PAWN] &= ~(1ULL << (to + 8));
+  }
+  B->ep = ep_after_move(B, pt, from, to, side);
+
   if (castle) {
     // move king
     if (side) { // white castle
@@ -397,7 +411,10 @@ uint64_t imove(int piece, uint64_t from_mask, board *B, int *white) {
   uint64_t moves;
   switch (piece)
   {
-  case PAWN: return (*white ? wp_moves(from_mask, B->whites, B->blacks) : bp_moves(from_mask, B->whites, B->blacks));
+  case PAWN: { // en passant square counts as an enemy piece for pawn captures
+    uint64_t ep_mask = (B->ep >= 0) ? (1ULL << B->ep) : 0;
+    return (*white ? wp_moves(from_mask, B->whites, B->blacks | ep_mask) : bp_moves(from_mask, B->whites | ep_mask, B->blacks));
+  }
   case KNIGHT: return (*white ? wn_moves(from_mask, B->whites, B->jumps) : bn_moves(from_mask, B->blacks, B->jumps));
   case BISHOP: return (*white ? wb_moves(from_mask, B->whites, B->blacks) : bb_moves(from_mask, B->whites, B->blacks));
   case ROOK: return (*white ? wr_moves(from_mask, B->whites, B->blacks) : br_moves(from_mask, B->whites, B->blacks));

@@ -62,6 +62,7 @@ struct board_header {
   uint64_t blacks;
   uint8_t castle;
   uint8_t cc; // castle completed
+  int ep; // en passant target square
 };
 
 struct snapshot_header {
@@ -72,6 +73,7 @@ struct snapshot_header {
   int white;
   uint8_t castle;
   uint8_t cc; // castle completed
+  int ep; // en passant target square
 };
 
 typedef struct {
@@ -90,6 +92,7 @@ typedef struct {
   int captured_square; // usually == to
   uint8_t prev_castle;
   uint8_t prev_cc;
+  int prev_ep;
   int promo; // 0 no promotion
 } undo_t;
 
@@ -148,3 +151,5 @@ static inline void add_castles(board *B, int white, move_t **list, int *count, i
 static inline void add_castles_nalloc(board *B, int white, move_t *list, int *count, int max_moves);
 int square_attacker(const board *B_in, int square, int by_black);
 void apply_promotion(board *B, int side, int to, int newp);
+int is_en_passant(const board *B, int piece, int from, int to);
+int ep_after_move(const board *B, int piece, int from, int to, int white);

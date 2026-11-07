@@ -72,7 +72,8 @@ board *init_board(void) {
     exit(1);
   }
   init_jump_table(B->jumps);
-  
+  B->ep = -1;
+
   return B;
 }
 
@@ -117,7 +118,8 @@ board *preset_board(uint64_t wpawns, uint64_t bpawns, uint64_t wknights, uint64_
     exit(1);
   }
   init_jump_table(B->jumps);
-  
+  B->ep = -1;
+
   return B;
 }
 
@@ -194,6 +196,13 @@ int load_fen(board *B, const char *fen) {
   if (!Bl[KING] || (Bl[KING] & (Bl[KING] - 1))) return 0;
 
   load_position(B, W, Bl, white, castle, 0); // cc = 0
+
+  while (*p == ' ') p++; // en passant field, keep only if a capture is possible
+  if (*p >= 'a' && *p <= 'h' && p[1] >= '1' && p[1] <= '8') {
+    int ep = (p[1] - '1') * 8 + (p[0] - 'a');
+    int pushed = white ? ep - 8 : ep + 8; // square of the pawn that just double pushed
+    B->ep = ep_after_move(B, PAWN, white ? pushed + 16 : pushed - 16, pushed, !white);
+  }
   return 1;
 }
 
@@ -726,9 +735,27 @@ int value(int piece) {
   }
 }
 
+int is_en_passant(const board *B, int piece, int from, int to) {
+  return piece == PAWN && to == B->ep && (from % 8) != (to % 8);
+}
+
+int ep_after_move(const board *B, int piece, int from, int to, int white) { // new ep square, -1 none
+  if (piece != PAWN || abs(to - from) != 16) return -1;
+  int ep = (from + to) / 2;
+  uint64_t enemy = white ? B->BLACK[PAWN] : B->WHITE[PAWN];
+  uint64_t beside = ((1ULL << to) << 1 & ~FILE_A) | ((1ULL << to) >> 1 & ~FILE_H); // pawns next to `to`
+  return (enemy & beside) ? ep : -1;
+}
+
 void fast_execute(board *B, int piece, int from, int to, int white, int promo) {
   uint64_t from_mask = 1ULL << from;
   uint64_t to_mask = 1ULL << to;
+
+  if (is_en_passant(B, piece, from, to)) { // captured pawn is behind the target square
+    if (white) B->BLACK[PAWN] &= ~(1ULL << (to - 8));
+    else B->WHITE[PAWN] &= ~(1ULL << (to + 8));
+  }
+  B->ep = ep_after_move(B, piece, from, to, white);
 
   if (white) { // castle rights
     if (piece == KING) {
@@ -834,8 +861,14 @@ void make_move(board* B, const move_t* m, int side, undo_t* u) {
 
   u->captured_piece = -1;
   u->captured_square = m->to;
+  u->prev_ep = B->ep;
 
   u->promo = m->promo;
+
+  if (is_en_passant(B, m->piece, m->from, m->to)) {
+    u->captured_piece = PAWN;
+    u->captured_square = side ? m->to - 8 : m->to + 8;
+  }
 
   if (side) { // white moved
     for (int i = 0; i < NUM_PIECES; ++i) {
@@ -862,6 +895,7 @@ void unmake_move(board* B, const move_t* m, int side, const undo_t* u) {
 
   B->castle = u->prev_castle;
   B->cc = u->prev_cc;
+  B->ep = u->prev_ep;
 
   if (side) { // white moved
     if (u->promo != 0 && u->moved_piece == PAWN) {
@@ -918,7 +952,7 @@ void unmake_move(board* B, const move_t* m, int side, const undo_t* u) {
   B->blacks = blacks(B);
 }
 
-static uint64_t Z_WHITE[NUM_PIECES][64], Z_BLACK[NUM_PIECES][64], Z_CASTLE[16], Z_CC[16], Z_SIDE;
+static uint64_t Z_WHITE[NUM_PIECES][64], Z_BLACK[NUM_PIECES][64], Z_CASTLE[16], Z_CC[16], Z_EP[8], Z_SIDE;
 
 static uint64_t zobrist_rand(void) { // splitmix64
   static uint64_t x = 0x1234567890abcdefULL;
@@ -928,7 +962,7 @@ static uint64_t zobrist_rand(void) { // splitmix64
   return z ^ (z >> 31);
 }
 
-static uint64_t zobrist(const uint64_t *W, const uint64_t *Bl, int white, uint8_t castle, uint8_t cc) {
+static uint64_t zobrist(const uint64_t *W, const uint64_t *Bl, int white, uint8_t castle, uint8_t cc, int ep) {
   static int ready = 0;
   if (!ready) {
     for (int p = 0; p < NUM_PIECES; ++p)
@@ -940,6 +974,8 @@ static uint64_t zobrist(const uint64_t *W, const uint64_t *Bl, int white, uint8_
       Z_CASTLE[i] = zobrist_rand();
       Z_CC[i] = zobrist_rand();
     }
+    for (int i = 0; i < 8; ++i)
+      Z_EP[i] = zobrist_rand();
     Z_SIDE = zobrist_rand();
     ready = 1;
   }
@@ -952,16 +988,17 @@ static uint64_t zobrist(const uint64_t *W, const uint64_t *Bl, int white, uint8_
   }
   hash ^= Z_CASTLE[castle & 15];
   hash ^= Z_CC[cc & 15];
+  if (ep >= 0) hash ^= Z_EP[ep % 8];
   if (white) hash ^= Z_SIDE;
   return hash;
 }
 
 uint64_t hash_board(const board* B) {
-  return zobrist(B->WHITE, B->BLACK, B->white, B->castle, B->cc);
+  return zobrist(B->WHITE, B->BLACK, B->white, B->castle, B->cc, B->ep);
 }
 
 uint64_t hash_snapshot(const board_snapshot* S) {
-  return zobrist(S->WHITE, S->BLACK, S->white, S->castle, S->cc);
+  return zobrist(S->WHITE, S->BLACK, S->white, S->castle, S->cc, S->ep);
 }
 
 void save_snapshot(const board *B, board_snapshot *S) {
@@ -975,6 +1012,7 @@ void save_snapshot(const board *B, board_snapshot *S) {
   S->white = B->white;
   S->castle = B->castle;
   S->cc = B->cc;
+  S->ep = B->ep;
 }
 
 void restore_snapshot(board *B, const board_snapshot *S) {
@@ -988,6 +1026,7 @@ void restore_snapshot(board *B, const board_snapshot *S) {
   B->white = S->white;
   B->castle = S->castle;
   B->cc = S->cc;
+  B->ep = S->ep;
 }
 
 int check(const board *B, int side) { // side puts opponent in check
@@ -1058,6 +1097,7 @@ void load_position(board *B, const uint64_t *WHITE, const uint64_t *BLACK, int w
   }
   B->castle = castle;
   B->cc = cc;
+  B->ep = -1;
   B->whites = w;
   B->blacks = b;
   B->white = white;

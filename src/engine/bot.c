@@ -142,7 +142,10 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       if (nmdepth < 0) nmdepth = 0;
 
       B->white = !max; // give side to opp
+      int nm_ep = B->ep;
+      B->ep = -1; // ep capture only valid for the side
       int nmeval = minimax(B, nmdepth, !max, alpha, beta, info, ply + 1);
+      B->ep = nm_ep;
       B->white = max;
 
       if (max) {
@@ -545,6 +548,7 @@ int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply) {
 }
 
 int bot_verbose = 1;
+int bot_last_promo = 0;
 
 int find_move(bot *bot, int is_white, int limit) {
   return find_move_ms(bot, is_white, limit * 1000);
@@ -578,7 +582,7 @@ int find_move_ms(bot *bot, int is_white, int limit_ms) {
     exit(1);
   }
 #endif
-  int move = -1;
+  int move = -1, promo = 0;
   int best = is_white ? INT32_MIN : INT32_MAX;
   move_t *moves;
   int move_count = movegen_ply(bot->B, is_white, 1, 0, &moves, move_stack, MAX_MOVES);
@@ -605,7 +609,7 @@ int find_move_ms(bot *bot, int is_white, int limit_ms) {
       asp_hi = prev_score + asp_delta;
     }
 
-    int lbest, lmove;
+    int lbest, lmove, lpromo = 0;
     int root_alpha, root_beta;
 
 asp_retry:
@@ -628,6 +632,7 @@ asp_retry:
           if (eval > lbest) {
             lbest = eval;
             lmove = packed;
+            lpromo = moves[i].promo;
             pv_table[0][0] = moves[i];
             int clen = pv_length[1];
             if (clen > MAX_PLY - 1)
@@ -642,6 +647,7 @@ asp_retry:
           if (eval < lbest) {
             lbest = eval;
             lmove = packed;
+            lpromo = moves[i].promo;
             pv_table[0][0] = moves[i];
             int clen = pv_length[1];
             if (clen > MAX_PLY - 1)
@@ -659,6 +665,7 @@ asp_retry:
 #endif
           if (move == -1) {
             move = lmove;
+            promo = lpromo;
             best = lbest;
           }
           pv_length[0] = best_pv_len;
@@ -691,6 +698,7 @@ asp_retry:
 
     best = lbest;
     move = lmove;
+    promo = lpromo;
     prev_score = lbest;
     best_pv_len = pv_length[0]; // save pv line
     for (int k = 0; k < best_pv_len; ++k)
@@ -721,6 +729,7 @@ end_find:
     printf("\n");
   printf("-------------------------------\n");
 #endif
+  bot_last_promo = promo;
   return move;
 }
 
