@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "lib/tt.h"
+#include "include/tt.h"
 
 tt_table_t *g_tt = NULL;
 

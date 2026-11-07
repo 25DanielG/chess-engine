@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include "lib/board.h"
-#include "lib/eval.h"
-#include "lib/utils.h"
+#include "include/board.h"
+#include "include/eval.h"
+#include "include/utils.h"
 
 const int PIECE_VALUES[NUM_PIECES] = {100, 320, 330, 500, 900, 20000};
 const int END_VALUES[NUM_PIECES] = {120, 310, 340, 500, 900, 20000};

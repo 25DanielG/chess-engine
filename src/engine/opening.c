@@ -1,5 +1,5 @@
-#include "lib/opening.h"
-#include "lib/utils.h"
+#include "include/opening.h"
+#include "include/utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

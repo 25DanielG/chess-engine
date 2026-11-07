@@ -4,10 +4,10 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <assert.h>
-#include "lib/board.h"
-#include "lib/manager.h"
-#include "lib/magic.h"
-#include "lib/utils.h"
+#include "include/board.h"
+#include "include/manager.h"
+#include "include/magic.h"
+#include "include/utils.h"
 
 static inline int lsb(uint64_t x) {
   /* if (!x) {

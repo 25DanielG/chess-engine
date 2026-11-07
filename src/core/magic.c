@@ -4,9 +4,9 @@
 #include <stdbool.h>
 #include <time.h>
 #include <string.h>
-#include "lib/board.h"
-#include "lib/magic.h"
-#include "lib/manager.h"
+#include "include/board.h"
+#include "include/magic.h"
+#include "include/manager.h"
 
 const uint64_t BISHOP_MAGICS[BOARD_SIZE] = {
   9368648609924554880ULL, 9009475591934976ULL, 4504776450605056ULL,

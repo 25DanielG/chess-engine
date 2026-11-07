@@ -4,13 +4,13 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
-#include "lib/bot.h"
-#include "lib/board.h"
-#include "lib/manager.h"
-#include "lib/eval.h"
-#include "lib/utils.h"
-#include "lib/tt.h"
-#include "lib/see.h"
+#include "include/bot.h"
+#include "include/board.h"
+#include "include/manager.h"
+#include "include/eval.h"
+#include "include/utils.h"
+#include "include/tt.h"
+#include "include/see.h"
 
 move_t pv_table[MAX_PLY][MAX_PLY];
 int pv_length[MAX_PLY];

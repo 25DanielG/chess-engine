@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include "lib/board.h"
-#include "lib/manager.h"
-#include "lib/bot.h"
-#include "lib/eval.h"
-#include "lib/magic.h"
-#include "lib/ui_sdl.h"
-#include "lib/utils.h"
-#include "lib/opening.h"
+#include "include/board.h"
+#include "include/manager.h"
+#include "include/bot.h"
+#include "include/eval.h"
+#include "include/magic.h"
+#include "include/ui_sdl.h"
+#include "include/utils.h"
+#include "include/opening.h"
 
 int history_len = 0;
 

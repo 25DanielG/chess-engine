@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include "lib/see.h"
-#include "lib/board.h"
-#include "lib/magic.h"
+#include "include/see.h"
+#include "include/board.h"
+#include "include/magic.h"
 
 static const int SEE_VALUES[NUM_PIECES] = {
   SEE_PAWN, SEE_KNIGHT, SEE_BISHOP, SEE_ROOK, SEE_QUEEN, SEE_KING

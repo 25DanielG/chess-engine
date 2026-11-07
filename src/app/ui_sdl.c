@@ -2,13 +2,13 @@
 #include <SDL_image.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "lib/board.h"
-#include "lib/magic.h"
-#include "lib/manager.h"
-#include "lib/eval.h"
-#include "lib/ui_sdl.h"
-#include "lib/utils.h"
-#include "lib/opening.h"
+#include "include/board.h"
+#include "include/magic.h"
+#include "include/manager.h"
+#include "include/eval.h"
+#include "include/ui_sdl.h"
+#include "include/utils.h"
+#include "include/opening.h"
 
 const char* TEX_PATHS[TEX_COUNT] = {
   "assets/wP.gif", "assets/wN.gif", "assets/wB.gif",
