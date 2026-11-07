@@ -10,16 +10,32 @@
 #define MAX_INPUT_SIZE (10)
 #define MAX_GAME_MOVES (512)
 
-// CONFIG
+// CONFIG — use #ifndef so command-line -D flags take precedence
 
+#ifndef GRAPHICS
 #define GRAPHICS (1) // graphics
+#endif
+#ifndef OPENING_BOOK
 #define OPENING_BOOK (1) // opening book usage
+#endif
+#ifndef WHITE_BOT
 #define WHITE_BOT (0)
+#endif
+#ifndef BLACK_BOT
 #define BLACK_BOT (1)
+#endif
+#ifndef WHITE_DEPTH
 #define WHITE_DEPTH (15)
+#endif
+#ifndef BLACK_DEPTH
 #define BLACK_DEPTH (15)
+#endif
+#ifndef WHITE_LIMIT
 #define WHITE_LIMIT (5) // sec
+#endif
+#ifndef BLACK_LIMIT
 #define BLACK_LIMIT (10) // sec
+#endif
 
 // ARRAYS
 

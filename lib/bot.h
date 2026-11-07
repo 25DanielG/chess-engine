@@ -24,32 +24,34 @@
 #define ROOT_QUIESCENCE_ENABLED (1)
 
 #define LMR_ENABLED (1)
-#define LMR_MIN_DEPTH (3)
+#define LMR_MIN_DEPTH (2)
 #define LMR_BASE_REDUCTION (1)
+
+#define ASPIRATION_WINDOW (50)
 
 #define NMP_ENABLED (1)
 #define NMP_MIN_DEPTH (3)
 #define NMP_BASE_REDUCTION (2)
 #define NMP_EXTRA_REDUCTION(depth) ((depth) / 3)
-#define NMP_MARGIN (2 * PAWN_VALUE) // stand eval above beta by margin
+#define NMP_MARGIN (2 * SEE_PAWN) // stand eval above beta by margin
 
 #define LMP_ENABLED (1)
 #define LMP_MAX_DEPTH (3) // only shallow depth
 #define LMP_SKIP_BASE (3) // skip quiet moves after 8th
 
-#define FUT_ENABLED (0)
-#define FUT_NODE_MAX_DEPTH (2) // depth <= []
-#define FUT_BASE_MARGIN (2 * PAWN_VALUE) // base fut margin
+#define FUT_ENABLED (1)
+#define FUT_NODE_MAX_DEPTH (1) // depth <= []
+#define FUT_BASE_MARGIN (2 * SEE_PAWN) // base fut margin
 #define FUT_MOVE_MAX_DEPTH (3)
-#define FUT_MOVE_MARGIN (1 * PAWN_VALUE) // quite move margin
+#define FUT_MOVE_MARGIN (1 * SEE_PAWN) // quite move margin
 
 #define DELTA_PRUNE_ENABLED (1)
 #define DELTA_MARGIN SEE_PAWN // delta margin in centipawns
 
 #define RAZOR_ENABLED (1)
 #define RAZOR_MAX_DEPTH (2) // only depth 1–2
-#define RAZOR_MARGIN1 (1 * PAWN_VALUE) // first stage
-#define RAZOR_MARGIN2 (2 * PAWN_VALUE)
+#define RAZOR_MARGIN1 (1 * SEE_PAWN) // first stage
+#define RAZOR_MARGIN2 (2 * SEE_PAWN)
 
 #define PVS_ENABLED (1)
 #define WINDOW_IS_PV(alpha, beta) ((beta) - (alpha) > 1)
@@ -61,6 +63,12 @@
 
 #define SEE_PRUNE_DEPTH (3) // prune bad captures to depth
 #define SEE_PRUNE_MARGIN SEE_PAWN // prune if SEE < -margin * depth
+
+#define MAX_GAME_HASH (1024)
+extern uint64_t game_hash_history[MAX_GAME_HASH];
+extern int game_hash_count;
+void rep_add(uint64_t h);
+void rep_reset(void);
 
 struct bot_header {
   board *B;

@@ -78,7 +78,7 @@ int phase(const board *B) {
 int scale(const board *B, int eg_score) {
   int no_wpawns = (__builtin_popcountll(B->WHITE[PAWN]) == 0);
   int no_bpawns = (__builtin_popcountll(B->BLACK[PAWN]) == 0);
-  if (no_wpawns || no_bpawns) return HALF_SCALE;
+  if (no_wpawns && no_bpawns) return HALF_SCALE;
   int wking_mobile = B->WHITE[KING] & ~RANK_1 & ~RANK_2;
   int bking_mobile = B->BLACK[KING] & ~RANK_8 & ~RANK_7;
   if (wking_mobile && bking_mobile) return MAX_SCALE;
@@ -144,6 +144,18 @@ int end_eval(const board *B) {
   return end_mat_eval(B) + king_activity(B) + pawn_structure(B) + passed_pawns(B);
 }
 
+static const uint64_t FILES[8] = { FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H };
+static const uint64_t ADJ_FILES[8] = {
+  FILE_B,
+  FILE_A | FILE_C,
+  FILE_B | FILE_D,
+  FILE_C | FILE_E,
+  FILE_D | FILE_F,
+  FILE_E | FILE_G,
+  FILE_F | FILE_H,
+  FILE_G
+};
+
 static inline int pop_lsb(uint64_t *bb) {
   int s = __builtin_ctzll(*bb);
   *bb &= (*bb - 1);
@@ -155,13 +167,14 @@ void init_pesto_tables(void) {
     int wpc = PCODE(pt, CONST_WHITE);
     int bpc = PCODE(pt, CONST_BLACK);
     for (int sq = 0; sq < 64; ++sq) {
-      mg_table[wpc][sq] = mg_value[pt] + (pt == PAWN ? mg_pawn_table[sq] : pt == KNIGHT?mg_knight_table[sq] : pt == BISHOP ? mg_bishop_table[sq] : pt == ROOK ? mg_rook_table[sq] : pt == QUEEN ? mg_queen_table[sq] : mg_king_table[sq]);
-      eg_table[wpc][sq] = eg_value[pt] + (pt==PAWN ? eg_pawn_table[sq] : pt==KNIGHT ? eg_knight_table[sq] : pt==BISHOP ? eg_bishop_table[sq] : pt==ROOK ? eg_rook_table[sq] : pt==QUEEN ? eg_queen_table[sq] : eg_king_table[sq]);
+      // Tables are stored rank-8-first; white needs FLIP(sq) to get the correct rank.
+      int wsq = FLIP(sq);
+      mg_table[wpc][sq] = mg_value[pt] + (pt == PAWN ? mg_pawn_table[wsq] : pt == KNIGHT ? mg_knight_table[wsq] : pt == BISHOP ? mg_bishop_table[wsq] : pt == ROOK ? mg_rook_table[wsq] : pt == QUEEN ? mg_queen_table[wsq] : mg_king_table[wsq]);
+      eg_table[wpc][sq] = eg_value[pt] + (pt == PAWN ? eg_pawn_table[wsq] : pt == KNIGHT ? eg_knight_table[wsq] : pt == BISHOP ? eg_bishop_table[wsq] : pt == ROOK ? eg_rook_table[wsq] : pt == QUEEN ? eg_queen_table[wsq] : eg_king_table[wsq]);
 
-      // flip for black
-      int fsq = FLIP(sq);
-      mg_table[bpc][sq] = mg_value[pt] + (pt==PAWN ? mg_pawn_table[fsq] : pt==KNIGHT ? mg_knight_table[fsq] : pt==BISHOP ? mg_bishop_table[fsq] : pt==ROOK ? mg_rook_table[fsq] : pt==QUEEN ? mg_queen_table[fsq] : mg_king_table[fsq]);
-      eg_table[bpc][sq] = eg_value[pt] + (pt==PAWN ? eg_pawn_table[fsq] : pt==KNIGHT ? eg_knight_table[fsq] : pt==BISHOP ? eg_bishop_table[fsq] : pt==ROOK ? eg_rook_table[fsq] : pt==QUEEN ? eg_queen_table[fsq] : eg_king_table[fsq]);
+      // Black uses sq directly (rank-8-first = black's near-promotion rank).
+      mg_table[bpc][sq] = mg_value[pt] + (pt == PAWN ? mg_pawn_table[sq] : pt == KNIGHT ? mg_knight_table[sq] : pt == BISHOP ? mg_bishop_table[sq] : pt == ROOK ? mg_rook_table[sq] : pt == QUEEN ? mg_queen_table[sq] : mg_king_table[sq]);
+      eg_table[bpc][sq] = eg_value[pt] + (pt == PAWN ? eg_pawn_table[sq] : pt == KNIGHT ? eg_knight_table[sq] : pt == BISHOP ? eg_bishop_table[sq] : pt == ROOK ? eg_rook_table[sq] : pt == QUEEN ? eg_queen_table[sq] : eg_king_table[sq]);
     }
   }
 }
@@ -198,6 +211,102 @@ void pesto_terms(const board *B, int *mg, int *eg, int *p24) {
   *p24 = gp;
 }
 
+int mating_bonus(const board *B) {
+  int bksq = __builtin_ctzll(B->BLACK[KING]);
+  int wksq = __builtin_ctzll(B->WHITE[KING]);
+  int bkr = bksq / 8, bkf = bksq % 8;
+  int wkr = wksq / 8, wkf = wksq % 8;
+  int bmin = (bkr < 4 ? bkr : 7 - bkr) + (bkf < 4 ? bkf : 7 - bkf);
+  // reward black king near edge regardless of white king position
+  int edge = MATING_EDGE_BONUS * (6 - bmin);
+  int prox = MATING_PROX_BONUS * (14 - (abs(bkr - wkr) + abs(bkf - wkf))) / 7;
+  return edge + prox;
+}
+
+int rook_file_bonus(const board *B) {
+  int score = 0;
+  for (int i = 0; i < 8; i++) {
+    int wrook = (B->WHITE[ROOK] & FILES[i]) != 0;
+    int brook = (B->BLACK[ROOK] & FILES[i]) != 0;
+    if (!wrook && !brook) continue;
+    int wpawn = (B->WHITE[PAWN] & FILES[i]) != 0;
+    int bpawn = (B->BLACK[PAWN] & FILES[i]) != 0;
+    if (wrook) {
+      if (!wpawn && !bpawn) score += ROOK_OPEN_FILE;
+      else if (!wpawn) score += ROOK_SEMI_OPEN;
+    }
+    if (brook) {
+      if (!wpawn && !bpawn) score -= ROOK_OPEN_FILE;
+      else if (!bpawn) score -= ROOK_SEMI_OPEN;
+    }
+  }
+  return score;
+}
+
+int pawn_weaknesses(const board *B) {
+  int score = 0;
+  for (int i = 0; i < 8; i++) {
+    int wc = __builtin_popcountll(B->WHITE[PAWN] & FILES[i]);
+    int bc = __builtin_popcountll(B->BLACK[PAWN] & FILES[i]);
+    if (wc > 1) score -= DOUBLED_PAWN_PENALTY * (wc - 1);
+    if (bc > 1) score += DOUBLED_PAWN_PENALTY * (bc - 1);
+    int wpawn = (B->WHITE[PAWN] & FILES[i]) != 0;
+    int bpawn = (B->BLACK[PAWN] & FILES[i]) != 0;
+    if (wpawn && !(B->WHITE[PAWN] & ADJ_FILES[i])) score -= ISOLATED_PAWN_PENALTY;
+    if (bpawn && !(B->BLACK[PAWN] & ADJ_FILES[i])) score += ISOLATED_PAWN_PENALTY;
+  }
+  return score;
+}
+
+int bishop_pair_bonus(const board *B) {
+  int score = 0;
+  if (__builtin_popcountll(B->WHITE[BISHOP]) >= 2) score += BISHOP_PAIR_BONUS;
+  if (__builtin_popcountll(B->BLACK[BISHOP]) >= 2) score -= BISHOP_PAIR_BONUS;
+  return score;
+}
+
+int rook_seventh_bonus(const board *B) {
+  int score = 0;
+  if (B->WHITE[ROOK] & RANK_7) score += ROOK_SEVENTH_BONUS;
+  if (B->BLACK[ROOK] & RANK_2) score -= ROOK_SEVENTH_BONUS;
+  return score;
+}
+
+int king_pawn_shield(const board *B) {
+  int score = 0;
+  // white king: only if not on starting square (already moved/castled)
+  if (B->WHITE[KING] && !(B->WHITE[KING] & (1ULL << E1))) {
+    int ksq = __builtin_ctzll(B->WHITE[KING]);
+    int kr = ksq / 8;
+    if (kr <= 1) { // king on rank 1 or 2 (kingside/queenside castle area)
+      int kf = ksq % 8;
+      for (int df = -1; df <= 1; df++) {
+        int f = kf + df;
+        if (f < 0 || f > 7) continue;
+        if (B->WHITE[PAWN] & FILES[f] & RANK_2) score += KING_SHIELD_RANK1;
+        else if (B->WHITE[PAWN] & FILES[f] & RANK_3) score += KING_SHIELD_RANK2;
+        else score -= KING_OPEN_FILE_PEN;  // open file next to castled king
+      }
+    }
+  }
+  // black king: only if not on starting square
+  if (B->BLACK[KING] && !(B->BLACK[KING] & (1ULL << E8))) {
+    int ksq = __builtin_ctzll(B->BLACK[KING]);
+    int kr = ksq / 8;
+    if (kr >= 6) { // king on rank 7 or 8 (kingside/queenside castle area)
+      int kf = ksq % 8;
+      for (int df = -1; df <= 1; df++) {
+        int f = kf + df;
+        if (f < 0 || f > 7) continue;
+        if (B->BLACK[PAWN] & FILES[f] & RANK_7) score -= KING_SHIELD_RANK1;
+        else if (B->BLACK[PAWN] & FILES[f] & RANK_6) score -= KING_SHIELD_RANK2;
+        else score += KING_OPEN_FILE_PEN;  // open file next to castled king
+      }
+    }
+  }
+  return score;
+}
+
 int blended_eval(const board *B) {
   wmoves = white_moves(B);
   bmoves = black_moves(B);
@@ -217,10 +326,16 @@ int blended_eval(const board *B) {
   int pps = passed_pawns(B);
   int castle = castle_eval(B);
   int dev = development(B);
+  int mat = mating_bonus(B);
+  int rfile = rook_file_bonus(B);
+  int pweak = pawn_weaknesses(B);
+  int bpair = bishop_pair_bonus(B);
+  int r7th = rook_seventh_bonus(B);
+  int kshield = king_pawn_shield(B);
 
   // feature sums
-  int mg_feats = (MOBILITY_MG * mob) + (CENTER_MG * ctr) + (KING_SAFETY_MG * ks) + castle + (DEV_MG * dev);
-  int eg_feats = (MOBILITY_EG * mob) + (CENTER_EG * ctr) + (KING_ACTIVITY_EG * ka) + (PSTRUCT_EG * pstr) + (PASSED_EG * pps);
+  int mg_feats = (MOBILITY_MG * mob) + (CENTER_MG * ctr) + (KING_SAFETY_MG * ks) + castle + (DEV_MG * dev) + rfile + kshield + pweak;
+  int eg_feats = (MOBILITY_EG * mob) + (CENTER_EG * ctr) + (KING_ACTIVITY_EG * ka) + (PSTRUCT_EG * pstr) + (PASSED_EG * pps) + mat + bpair + r7th + pweak;
 
   int mg_total = mg_psqt + mg_feats;
   int eg_total = eg_psqt + eg_feats;

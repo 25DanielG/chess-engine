@@ -36,6 +36,18 @@
 #define CASTLE_PT (20)
 #define CASTLE_CC (10)
 
+#define MATING_EDGE_BONUS (40)
+#define MATING_PROX_BONUS (30)
+#define ROOK_OPEN_FILE (25)
+#define ROOK_SEMI_OPEN (12)
+#define DOUBLED_PAWN_PENALTY (15)
+#define ISOLATED_PAWN_PENALTY (15)
+#define BISHOP_PAIR_BONUS (30)
+#define ROOK_SEVENTH_BONUS (20)
+#define KING_SHIELD_RANK1 (25)
+#define KING_SHIELD_RANK2 (10)
+#define KING_OPEN_FILE_PEN (20)
+
 // PeSTO
 #define PCODE(pt, color) (2 * (pt) + (color))
 #define FLIP(sq) ((sq) ^ 56)
@@ -148,4 +160,10 @@ int end_eval(const board *B);
 static inline int pop_lsb(uint64_t *bb);
 void init_pesto_tables(void);
 void pesto_terms(const board *B, int *mg, int *eg, int *p24);
-int blended_eval(const board *B); // blended eval function
+int mating_bonus(const board *B);
+int rook_file_bonus(const board *B);
+int pawn_weaknesses(const board *B);
+int bishop_pair_bonus(const board *B);
+int rook_seventh_bonus(const board *B);
+int king_pawn_shield(const board *B);
+int blended_eval(const board *B);

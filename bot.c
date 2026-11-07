@@ -22,6 +22,15 @@ move_t qmove_stack[MAX_QPLY][MAX_MOVES];
 move_t last_move[MAX_PLY];
 move_t counter_move[2][64][64]; // best reply side, from, to
 
+uint64_t game_hash_history[1024];
+int game_hash_count = 0;
+static uint64_t search_path_hashes[MAX_PLY];
+
+void rep_add(uint64_t h) {
+    if (game_hash_count < 1024) game_hash_history[game_hash_count++] = h;
+}
+void rep_reset(void) { game_hash_count = 0; }
+
 static const int PIECE_PT[64] = {
   -1, /*1*/ PAWN, /*2*/ KNIGHT, -1, /*4*/ BISHOP, -1, -1, -1, /*8*/ ROOK, -1, -1, -1, -1, -1, -1, -1,
   /*16*/ QUEEN, -1, -1, -1, -1, -1, -1, -1, -1,-1,-1,-1,-1,-1,-1,-1, /*32*/ KING, -1, -1, -1, -1, -1,
@@ -89,13 +98,12 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   int old = B->white;
   B->white = max;
 
-  uint64_t hash = 0; // TT
   uint16_t tt_move = 0;
   int tt_score = 0;
   int orig_alpha = alpha;
+  uint64_t hash = hash_board(B);
 
   if (TT_ENABLED && g_tt) {
-    hash = hash_board(B);
     if (tt_probe(g_tt, hash, depth, alpha, beta, &tt_score, &tt_move, ply)) {
       B->white = old; // TT hit
       return tt_score;
@@ -246,19 +254,18 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
 
     // SEE pruning for bad captures, low depths, no PV, prunes losing captures
     if (cap && !pv_node && !in_check && depth <= SEE_PRUNE_DEPTH && ply > 0 && i > 0) {
-      // if SEE < -margin * depth prune
       int see_threshold = -SEE_PRUNE_MARGIN * depth;
       if (!see_ge(B, &moves[i], max, see_threshold)) {
-        continue; // bad capture, prune
+        continue;
       }
     }
 
-    if (LMP_ENABLED && !pv_node && !near_root && !in_check && !cap && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP_BASE + depth) { // not check, not root
-      continue; // prune
+    if (LMP_ENABLED && !pv_node && !near_root && !in_check && !cap && depth <= LMP_MAX_DEPTH && ply > 0 && i >= LMP_SKIP_BASE + depth) {
+      continue;
     }
 
-    if (FUT_ENABLED && !pv_node && !in_check && depth <= FUT_MOVE_MAX_DEPTH && !cap && ply > 0 && i > 0 && have_stand && abs(stand_eval) < MATE_BOUND) { // not at root, not first move
-      int margin = FUT_MOVE_MARGIN * depth; // move futility pruning
+    if (FUT_ENABLED && !pv_node && !in_check && depth <= FUT_MOVE_MAX_DEPTH && !cap && ply > 0 && i > 0 && have_stand && abs(stand_eval) < MATE_BOUND) {
+      int margin = FUT_MOVE_MARGIN * depth;
       if (max) {
         if (stand_eval + margin <= alpha) {
           continue;
@@ -270,13 +277,12 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       }
     }
 
-    int is_good_capture = cap && see_ge(B, &moves[i], max, 0); // good capture if SEE >= 0
+    int is_good_capture = cap && see_ge(B, &moves[i], max, 0);
 
     make_move(B, &moves[i], max, &u);
-    last_move[ply] = moves[i]; // last move
+    last_move[ply] = moves[i];
     int gives_check = check(B, max);
 
-    // extend ply when move gives check
     int extension = 0;
     if (CHECK_EXTENSION_ENABLED && gives_check) {
       extension = CHECK_EXTENSION;
@@ -296,7 +302,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       int red_depth = new_depth - R;
       if (red_depth < 1) red_depth = 1;
       lmr = 1;
-      int nalpha = alpha; // reduced search window
+      int nalpha = alpha;
       int nbeta = alpha + 1;
       if (!max) {
         nbeta = beta;
@@ -305,14 +311,14 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
 
       eval = minimax(B, red_depth, !max, nalpha, nbeta, info, ply + 1);
 
-      if (max ? (eval > alpha) : (eval < beta)) { // re-search full window
+      if (max ? (eval > alpha) : (eval < beta)) {
         eval = minimax(B, new_depth, !max, alpha, beta, info, ply + 1);
       }
     } else {
       if (!PVS_ENABLED || i == 0) {
         eval = minimax(B, new_depth, !max, alpha, beta, info, ply + 1);
       } else {
-        int pvs_alpha = alpha; // null window
+        int pvs_alpha = alpha;
         int pvs_beta  = alpha + 1;
         if (!max) {
           pvs_beta  = beta;
@@ -332,7 +338,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
 
     if (better) {
       best = eval;
-      best_move = moves[i];  // track best move for TT
+      best_move = moves[i];
 
       if (max) {
         if (best > alpha) alpha = best;
@@ -349,17 +355,16 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
 
     if (beta <= alpha) {
-      if (!cap) { // update killers, history, countermove for quiet moves
+      if (!cap) { // update killers, history, countermove for quiet cutoff move
         if (!equals(killer1[ply], moves[i])) {
           killer2[ply] = killer1[ply];
           killer1[ply] = moves[i];
         }
         history_tbl[max][moves[i].piece][moves[i].to] += depth * depth;
-
         if (ply > 0) {
-          move_t prev = last_move[ply - 1]; // move before this node
+          move_t prev = last_move[ply - 1];
           if (prev.from != 255) {
-            int prev_side = max ^ 1; // prev move played by opp
+            int prev_side = max ^ 1;
             counter_move[prev_side][prev.from][prev.to] = moves[i];
           }
         }
@@ -369,7 +374,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
     }
   }
 
-  if (TT_ENABLED && g_tt && best_move.from != 255) { // store TT
+  if (TT_ENABLED && g_tt && best_move.from != 255 && !time_flag) { // store TT, skip if aborted by time
     tt_flag_t flag;
     if (best <= orig_alpha) {
       flag = TT_UPPER;  // fail-low higher bound
@@ -391,36 +396,60 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
   * (info + 2) += 1;
 #endif
   if (time_over()) return blended_eval(B);
+  if (qply >= MAX_QPLY) return blended_eval(B);
 
-  if (qply >= MAX_QPLY)
-    return blended_eval(B);
+  int in_check = check(B, !side);
+  int stand = 0;
 
-  // 1 = white (max), 0 = black (min)
-  int stand = blended_eval(B);
-  if (side) { // max
-    if (stand >= beta)  return beta;
-    if (stand > alpha)  alpha = stand;
-  } else { // min
-    if (stand <= alpha) return alpha;
-    if (stand < beta)   beta = stand;
+  if (!in_check) {
+    // 1 = white (max), 0 = black (min)
+    stand = blended_eval(B);
+    if (side) { // max
+      if (stand >= beta)  return beta;
+      if (stand > alpha)  alpha = stand;
+    } else { // min
+      if (stand <= alpha) return alpha;
+      if (stand < beta)   beta = stand;
+    }
   }
 
+  move_t *mv;
+  int mcount = movegen_ply(B, side, in_check ? 1 : 0, qply, &mv, qmove_stack, MAX_MOVES);
+
+  if (in_check) {
+    if (mcount == 0) return side ? (-MATE + qply) : (MATE - qply);
+    for (int i = 0; i < mcount; ++i) {
+      undo_t u;
+      make_move(B, &mv[i], side, &u);
+      if (check(B, !side)) { unmake_move(B, &mv[i], side, &u); continue; }
+      int score = quiesce(B, !side, alpha, beta, info, qply + 1);
+      unmake_move(B, &mv[i], side, &u);
+      if (side) {
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+      } else {
+        if (score <= alpha) return alpha;
+        if (score < beta)   beta = score;
+      }
+    }
+    return side ? alpha : beta;
+  }
+
+  // not in check: filter captures and non-capture queen promotions
   move_t caps[MAX_MOVES];
   int n = 0;
-  move_t* mv;
-  int mcount = movegen_ply(B, side, 0, qply, &mv, qmove_stack, MAX_MOVES); // pseudo legal
-
-  // filter captures and score by SEE for ordering
   for (int i = 0; i < mcount; ++i) {
     uint64_t to_mask = 1ULL << mv[i].to;
     int is_cap = side ? ((B->blacks & to_mask) != 0) : ((B->whites & to_mask) != 0);
+    int is_qpromo = !is_cap && (mv[i].piece == PAWN) && (mv[i].promo == QUEEN);
     if (is_cap) {
-      // score by SEE value, mvvlva fallback
       int vic = victim_square(B, side, mv[i].to);
       int vic_val = (vic >= 0 ? see_value(vic) : 0);
       int atk_val = see_value(mv[i].piece);
-
       mv[i].order = vic_val * 16 - atk_val;
+      caps[n++] = mv[i];
+    } else if (is_qpromo) {
+      mv[i].order = (1 << 22); // high priority
       caps[n++] = mv[i];
     }
     if (n == MAX_MOVES) break;
@@ -525,6 +554,8 @@ int find_move(bot *bot, int is_white, int limit) {
     pv_length[i] = 0;
   }
 
+  memset(search_path_hashes, 0, sizeof(search_path_hashes));
+
   if (TT_ENABLED && !g_tt) {
     g_tt = tt_create(TT_SIZE_MB);
   }
@@ -547,52 +578,118 @@ int find_move(bot *bot, int is_white, int limit) {
   int move_count = movegen_ply(bot->B, is_white, 1, 0, &moves, move_stack, MAX_MOVES);
   int depth;
   int comp_depth = 0;
+  move_t best_root = { .from = 255 };
+  int prev_score = 0;
   if (move_count == 0) return -1; // no legal moves
   for (depth = 1; depth <= bot->depth; ++depth) {
     nodes = 0;
-    int i;
-    int lbest = is_white ? INT32_MIN : INT32_MAX;
-    int lmove = -1;
-    for (i = 0; i < move_count; ++i) {
-      undo_t u;
-      make_move(bot->B, &moves[i], is_white, &u);
-      last_move[0] = moves[i]; // last move
-      bot->B->white = !is_white;
-      int eval = minimax(bot->B, depth - 1, !is_white, INT32_MIN, INT32_MAX, info, 1);
-      bot->B->white = is_white;
-      unmake_move(bot->B, &moves[i], is_white, &u);
-      int packed = moves[i].from * 64 + moves[i].to;
-      if ((is_white && eval > lbest) || (!is_white && eval < lbest)) {
-        lbest = eval;
-        lmove = packed;
 
-        pv_table[0][0] = moves[i];
-        int clen = pv_length[1];
-        if (clen > MAX_PLY - 1)
-          clen = MAX_PLY - 1;
-        for (int k = 0; k < clen; ++k)
-          pv_table[0][1 + k] = pv_table[1][k];
-        pv_length[0] = 1 + clen;
-      }
-      if (time_over()) {
-#ifdef DEBUG
-        printf("Time limit reached...\n");
-#endif
-        if (move == -1) {
-          move = lmove;
-          best = lbest;
+    // order root moves: best-from-prev-depth first, then SEE/killers/history
+    uint16_t root_tt_move = 0;
+    if (best_root.from != 255)
+      root_tt_move = tt_encode_move(best_root.from, best_root.to, best_root.promo);
+    score_moves(bot->B, moves, move_count, is_white, 0, root_tt_move);
+
+    // aspiration window: narrow window around prev score for depth >= 4
+    int asp_lo = INT32_MIN, asp_hi = INT32_MAX;
+    int asp_delta = 0;
+    if (depth >= 4 && abs(prev_score) < MATE - 200) {
+      asp_delta = ASPIRATION_WINDOW;
+      asp_lo = prev_score - asp_delta;
+      asp_hi = prev_score + asp_delta;
+    }
+
+    int lbest, lmove;
+    int root_alpha, root_beta;
+
+asp_retry:
+    lbest = is_white ? INT32_MIN : INT32_MAX;
+    lmove = -1;
+    root_alpha = asp_lo;
+    root_beta = asp_hi;
+    {
+      int i;
+      for (i = 0; i < move_count; ++i) {
+        undo_t u;
+        make_move(bot->B, &moves[i], is_white, &u);
+        last_move[0] = moves[i]; // last move
+        bot->B->white = !is_white;
+        int eval = minimax(bot->B, depth - 1, !is_white, root_alpha, root_beta, info, 1);
+        bot->B->white = is_white;
+        unmake_move(bot->B, &moves[i], is_white, &u);
+        int packed = moves[i].from * 64 + moves[i].to;
+        if (is_white) {
+          if (eval > lbest) {
+            lbest = eval;
+            lmove = packed;
+            pv_table[0][0] = moves[i];
+            int clen = pv_length[1];
+            if (clen > MAX_PLY - 1)
+              clen = MAX_PLY - 1;
+            for (int k = 0; k < clen; ++k)
+              pv_table[0][1 + k] = pv_table[1][k];
+            pv_length[0] = 1 + clen;
+          }
+          if (eval > root_alpha && eval < root_beta) root_alpha = eval;
+          if (eval >= root_beta) break;  // aspiration fail-high
+        } else {
+          if (eval < lbest) {
+            lbest = eval;
+            lmove = packed;
+            pv_table[0][0] = moves[i];
+            int clen = pv_length[1];
+            if (clen > MAX_PLY - 1)
+              clen = MAX_PLY - 1;
+            for (int k = 0; k < clen; ++k)
+              pv_table[0][1 + k] = pv_table[1][k];
+            pv_length[0] = 1 + clen;
+          }
+          if (eval < root_beta && eval > root_alpha) root_beta = eval;
+          if (eval <= root_alpha) break;  // aspiration fail-high for black
         }
-        pv_length[0] = best_pv_len;
-        for (int k = 0; k < best_pv_len; ++k)
-          pv_table[0][k] = best_pv[k];
-        goto end_find;
+        if (time_over()) {
+#ifdef DEBUG
+          printf("Time limit reached...\n");
+#endif
+          if (move == -1) {
+            move = lmove;
+            best = lbest;
+          }
+          pv_length[0] = best_pv_len;
+          for (int k = 0; k < best_pv_len; ++k)
+            pv_table[0][k] = best_pv[k];
+          goto end_find;
+        }
       }
     }
+
+    // check aspiration failure: retry with wider window
+    if (asp_delta > 0) {
+      if (is_white && lbest <= asp_lo) {
+        asp_lo = INT32_MIN;
+        goto asp_retry;
+      }
+      if (!is_white && lbest >= asp_hi) {
+        asp_hi = INT32_MAX;
+        goto asp_retry;
+      }
+      if (is_white && lbest >= asp_hi) {
+        asp_hi = INT32_MAX;
+        goto asp_retry;
+      }
+      if (!is_white && lbest <= asp_lo) {
+        asp_lo = INT32_MIN;
+        goto asp_retry;
+      }
+    }
+
     best = lbest;
     move = lmove;
+    prev_score = lbest;
     best_pv_len = pv_length[0]; // save pv line
     for (int k = 0; k < best_pv_len; ++k)
       best_pv[k] = pv_table[0][k];
+    if (best_pv_len > 0) best_root = best_pv[0]; // track root best for next depth ordering
 #ifdef DEBUG
     printf("Depth %d ran in %lf seconds, best move: %d, eval: %d\n", depth, gtime() - start, move, best);
 #endif
@@ -679,6 +776,8 @@ static void score_moves(const board *B, move_t *mv, int n, int side_to_move, int
         int mvvlva_bonus = (vic >= 0 ? mvv_lva[vic][mv[i].piece] : 0);
         score = (1 << 17) + mvvlva_bonus + see_score; // see_score negative
       }
+    } else if (mv[i].piece == PAWN && mv[i].promo == QUEEN) {
+      score = (1 << 22); // non-capture queen promotion
     } else {
       // killers
       if (equals(killer1[ply], mv[i])) score = (1 << 21);

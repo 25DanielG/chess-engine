@@ -5,3 +5,6 @@ a.out
 chess
 .DS_Store
 .editorconfig
+.context/
+test_engine
+__pycache__/

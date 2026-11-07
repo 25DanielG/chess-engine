@@ -34,6 +34,8 @@ int run(void) {
   printf("Initialized attack & pesto tables and opening book.\n");
 #endif
   board *B = init_board();
+  rep_reset();
+  rep_add(hash_board(B));  // track initial position
   // test_position(B); // for testing hardcoded positions
   char input[MAX_INPUT_SIZE];
   int from, to, ply = 0, move = 0, mode = 0;
@@ -45,7 +47,15 @@ int run(void) {
 
   printf("Notation (e2 e4).\n");
 
+#ifndef MAX_GAME_PLIES
+#define MAX_GAME_PLIES (0)
+#endif
+
   while (true) {
+    if (MAX_GAME_PLIES > 0 && ply >= MAX_GAME_PLIES) {
+      printf("DRAW_LIMIT\n");
+      break;
+    }
     out(B, mode);
     printf("White: %d, Move %d\n", B->white, move);
 #ifdef DEBUG
@@ -103,6 +113,15 @@ int run(void) {
           ++ply;
           move = ply / 2;
           B->white = !B->white;
+          {
+            uint64_t cur_h = hash_board(B);
+            rep_add(cur_h);
+            int rep_cnt = 0;
+            for (int _i = 0; _i < game_hash_count; _i++) {
+              if (game_hash_history[_i] == cur_h) rep_cnt++;
+            }
+            if (rep_cnt >= 3) { printf("DRAW_REPETITION\n"); goto game_over; }
+          }
 #ifdef DEBUG
           const char *line_name = NULL;
           int matched = get_line_info(move_history, history_len, &line_name);
@@ -190,6 +209,15 @@ int run(void) {
           ++ply;
           move = ply / 2;
           B->white = !B->white;
+          {
+            uint64_t cur_h = hash_board(B);
+            rep_add(cur_h);
+            int rep_cnt = 0;
+            for (int _i = 0; _i < game_hash_count; _i++) {
+              if (game_hash_history[_i] == cur_h) rep_cnt++;
+            }
+            if (rep_cnt >= 3) { printf("DRAW_REPETITION\n"); goto game_over; }
+          }
 #ifdef DEBUG
           const char *line_name = NULL;
           int matched = get_line_info(move_history, history_len, &line_name);
@@ -232,6 +260,7 @@ int run(void) {
       }
     }
   }
+game_over:
 
   free_history();
   free_opening_book();

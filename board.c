@@ -918,38 +918,50 @@ void unmake_move(board* B, const move_t* m, int side, const undo_t* u) {
   B->blacks = blacks(B);
 }
 
-uint64_t hash_board(const board* B) {
-  uint64_t hash = 0;
+static uint64_t Z_WHITE[NUM_PIECES][64], Z_BLACK[NUM_PIECES][64], Z_CASTLE[16], Z_CC[16], Z_SIDE;
 
-  for (int i = 0; i < NUM_PIECES; ++i) {
-    hash ^= B->WHITE[i] * 0x9e3779b97f4a7c15ULL;
-    hash ^= B->BLACK[i] * 0xc3a5c85c97cb3127ULL;
+static uint64_t zobrist_rand(void) { // splitmix64
+  static uint64_t x = 0x1234567890abcdefULL;
+  uint64_t z = (x += 0x9e3779b97f4a7c15ULL);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  return z ^ (z >> 31);
+}
+
+static uint64_t zobrist(const uint64_t *W, const uint64_t *Bl, int white, uint8_t castle, uint8_t cc) {
+  static int ready = 0;
+  if (!ready) {
+    for (int p = 0; p < NUM_PIECES; ++p)
+      for (int sq = 0; sq < 64; ++sq) {
+        Z_WHITE[p][sq] = zobrist_rand();
+        Z_BLACK[p][sq] = zobrist_rand();
+      }
+    for (int i = 0; i < 16; ++i) {
+      Z_CASTLE[i] = zobrist_rand();
+      Z_CC[i] = zobrist_rand();
+    }
+    Z_SIDE = zobrist_rand();
+    ready = 1;
   }
 
-  hash ^= B->whites * 0x4cf5ad432745937fULL;
-  hash ^= B->blacks * 0x94d049bb133111ebULL;
-  hash ^= ((uint64_t)B->white) << 1;
-  hash ^= ((uint64_t)B->castle) << 2;
-  hash ^= ((uint64_t)B->cc) << 3;
-
+  uint64_t hash = 0;
+  for (int p = 0; p < NUM_PIECES; ++p) {
+    uint64_t w = W[p], b = Bl[p];
+    while (w) { hash ^= Z_WHITE[p][lsb(w)]; w &= w - 1; }
+    while (b) { hash ^= Z_BLACK[p][lsb(b)]; b &= b - 1; }
+  }
+  hash ^= Z_CASTLE[castle & 15];
+  hash ^= Z_CC[cc & 15];
+  if (white) hash ^= Z_SIDE;
   return hash;
 }
 
+uint64_t hash_board(const board* B) {
+  return zobrist(B->WHITE, B->BLACK, B->white, B->castle, B->cc);
+}
+
 uint64_t hash_snapshot(const board_snapshot* S) {
-  uint64_t hash = 0;
-
-  for (int i = 0; i < NUM_PIECES; ++i) {
-    hash ^= S->WHITE[i] * 0x9e3779b97f4a7c15ULL;
-    hash ^= S->BLACK[i] * 0xc3a5c85c97cb3127ULL;
-  }
-
-  hash ^= S->whites * 0x4cf5ad432745937fULL;
-  hash ^= S->blacks * 0x94d049bb133111ebULL;
-  hash ^= ((uint64_t)S->white) << 1;
-  hash ^= ((uint64_t)S->castle) << 2;
-  hash ^= ((uint64_t)S->cc) << 3;
-
-  return hash;
+  return zobrist(S->WHITE, S->BLACK, S->white, S->castle, S->cc);
 }
 
 void save_snapshot(const board *B, board_snapshot *S) {
@@ -984,7 +996,7 @@ int check(const board *B, int side) { // side puts opponent in check
   int ksq = lsb(k);
 
   // pawn
-  uint64_t atkP = side ? ((B->WHITE[PAWN] & ~FILE_A) << 9) | ((B->WHITE[PAWN] & ~FILE_H) << 7) : ((B->BLACK[PAWN] & ~FILE_H) >> 7) | ((B->BLACK[PAWN] & ~FILE_A) >> 9);
+  uint64_t atkP = side ? ((B->WHITE[PAWN] & ~FILE_H) << 9) | ((B->WHITE[PAWN] & ~FILE_A) << 7) : ((B->BLACK[PAWN] & ~FILE_H) >> 7) | ((B->BLACK[PAWN] & ~FILE_A) >> 9);
   if (atkP & (1ULL << ksq)) return 1;
 
   // knight
@@ -1060,7 +1072,7 @@ static inline uint64_t white_attacks(const board *B) {
 
   // pawn
   uint64_t wp = B->WHITE[PAWN];
-  atk |= ((wp & ~FILE_A) << 9) | ((wp & ~FILE_H) << 7);
+  atk |= ((wp & ~FILE_H) << 9) | ((wp & ~FILE_A) << 7);
 
   // knight
   uint64_t n = B->WHITE[KNIGHT];
