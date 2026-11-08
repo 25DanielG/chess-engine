@@ -707,14 +707,14 @@ board *clone(board *B) {
 uint64_t sided_passed_pawns(uint64_t friend, uint64_t opp, int white) {
   uint64_t blockers;
   if (white) {
-    blockers = (opp | (opp >> 1 & ~FILE_A) | (opp << 1 & ~FILE_H));
+    blockers = (opp | (opp >> 1 & ~FILE_H) | (opp << 1 & ~FILE_A));
     blockers = blockers >> 8;
     blockers |= blockers >> 8;
     blockers |= blockers >> 16;
     blockers |= blockers >> 32;
     return friend & ~blockers;
   } else {
-    blockers = (opp | (opp >> 1 & ~FILE_A) | (opp << 1 & ~FILE_H));
+    blockers = (opp | (opp >> 1 & ~FILE_H) | (opp << 1 & ~FILE_A));
     blockers = blockers << 8;
     blockers |= blockers << 8;
     blockers |= blockers << 16;

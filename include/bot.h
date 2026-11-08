@@ -103,7 +103,7 @@ static inline int time_over(void);
 bot *init_bot(board *B, int white, int depth, int limit);
 double gtime(void);
 int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int ply);
-int quiesce(board *B, int side, int alpha, int beta, long *info, int qply);
+int quiesce(board *B, int side, int alpha, int beta, long *info, int ply, int qply);
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply);
 int find_move(bot *bot, int is_white, int limit); // limit in seconds
 int find_move_ms(bot *bot, int is_white, int limit_ms);

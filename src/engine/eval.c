@@ -112,12 +112,17 @@ int pawn_structure(const board *B) {
   return ((__builtin_popcountll(wp) - __builtin_popcountll(bp)) * (PAWN_PROMOTE));
 }
 
+static const int PASSED_RANK[8] = { 0, 5, 10, 20, 40, 70, 110, 0 };
+
 int passed_pawns(const board *B) {
   uint64_t wp = B->WHITE[PAWN];
   uint64_t bp = B->BLACK[PAWN];
   uint64_t wpass = sided_passed_pawns(wp, bp, 1);
   uint64_t bpass = sided_passed_pawns(bp, wp, 0);
-  return (PAWN_PASSED * (__builtin_popcountll(wpass) - __builtin_popcountll(bpass)));
+  int score = 0;
+  while (wpass) score += PASSED_RANK[pop_lsb(&wpass) / 8]; // white as is rank
+  while (bpass) score -= PASSED_RANK[7 - pop_lsb(&bpass) / 8]; // black mirrored rank
+  return score;
 }
 
 int development(const board *B) {
@@ -211,16 +216,25 @@ void pesto_terms(const board *B, int *mg, int *eg, int *p24) {
   *p24 = gp;
 }
 
+static int piece_material(const uint64_t *P) {
+  return PIECE_VALUES[KNIGHT] * __builtin_popcountll(P[KNIGHT]) + PIECE_VALUES[BISHOP] * __builtin_popcountll(P[BISHOP])
+       + PIECE_VALUES[ROOK] * __builtin_popcountll(P[ROOK]) + PIECE_VALUES[QUEEN] * __builtin_popcountll(P[QUEEN]);
+}
+
 int mating_bonus(const board *B) {
-  int bksq = __builtin_ctzll(B->BLACK[KING]);
-  int wksq = __builtin_ctzll(B->WHITE[KING]);
-  int bkr = bksq / 8, bkf = bksq % 8;
+  int diff = piece_material(B->WHITE) - piece_material(B->BLACK);
+  if (abs(diff) < MATING_MIN_ADVANTAGE) return 0;
+  int white_ahead = diff > 0;
+
+  int lksq = __builtin_ctzll(white_ahead ? B->BLACK[KING] : B->WHITE[KING]); // losing king
+  int wksq = __builtin_ctzll(white_ahead ? B->WHITE[KING] : B->BLACK[KING]); // winning king
+  int lkr = lksq / 8, lkf = lksq % 8;
   int wkr = wksq / 8, wkf = wksq % 8;
-  int bmin = (bkr < 4 ? bkr : 7 - bkr) + (bkf < 4 ? bkf : 7 - bkf);
-  // reward black king near edge regardless of white king position
-  int edge = MATING_EDGE_BONUS * (6 - bmin);
-  int prox = MATING_PROX_BONUS * (14 - (abs(bkr - wkr) + abs(bkf - wkf))) / 7;
-  return edge + prox;
+  int lmin = (lkr < 4 ? lkr : 7 - lkr) + (lkf < 4 ? lkf : 7 - lkf);
+  // push losing king to the edge, bring winning king closer
+  int edge = MATING_EDGE_BONUS * (6 - lmin);
+  int prox = MATING_PROX_BONUS * (14 - (abs(lkr - wkr) + abs(lkf - wkf))) / 7;
+  return white_ahead ? (edge + prox) : -(edge + prox);
 }
 
 int rook_file_bonus(const board *B) {

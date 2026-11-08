@@ -118,7 +118,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       return v;
     }
 
-    int v = ROOT_QUIESCENCE_ENABLED ? quiesce(B, max, alpha, beta, info, 0) : blended_eval(B);
+    int v = ROOT_QUIESCENCE_ENABLED ? quiesce(B, max, alpha, beta, info, ply, 0) : blended_eval(B);
     B->white = old;
     return v;
   }
@@ -128,7 +128,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   int near_root = (ply <= 2);
   int stand_eval = 0;
   int have_stand = 0;
-  const int MATE_BOUND = MATE - 2 * QUEEN_VALUE; // near mate bound
+  const int MATE_BOUND = MATE - 2 * SEE_QUEEN; // near mate bound
 
   if (NMP_ENABLED && !pv_node && !near_root && !in_check && depth >= NMP_MIN_DEPTH && ply > 0) {
     if (!have_stand) {
@@ -172,7 +172,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
       int margin1 = RAZOR_MARGIN1; // first stage razor, quiesce
       if (max) {
         if (stand_eval + margin1 <= alpha) {
-          int q = quiesce(B, max, alpha, beta, info, 0);
+          int q = quiesce(B, max, alpha, beta, info, ply, 0);
           if (q <= alpha) {
             B->white = old;
             return q;
@@ -180,7 +180,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
         }
       } else {
         if (stand_eval - margin1 >= beta) {
-          int q = quiesce(B, max, alpha, beta, info, 0);
+          int q = quiesce(B, max, alpha, beta, info, ply, 0);
           if (q >= beta) {
             B->white = old;
             return q;
@@ -394,7 +394,7 @@ int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int p
   return best;
 }
 
-int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
+int quiesce(board* B, int side, int alpha, int beta, long* info, int ply, int qply) {
 #ifdef DEBUG
   * (info + 2) += 1;
 #endif
@@ -420,12 +420,12 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
   int mcount = movegen_ply(B, side, in_check ? 1 : 0, qply, &mv, qmove_stack, MAX_MOVES);
 
   if (in_check) {
-    if (mcount == 0) return side ? (-MATE + qply) : (MATE - qply);
+    if (mcount == 0) return side ? (-MATE + ply + qply) : (MATE - ply - qply);
     for (int i = 0; i < mcount; ++i) {
       undo_t u;
       make_move(B, &mv[i], side, &u);
       if (check(B, !side)) { unmake_move(B, &mv[i], side, &u); continue; }
-      int score = quiesce(B, !side, alpha, beta, info, qply + 1);
+      int score = quiesce(B, !side, alpha, beta, info, ply, qply + 1);
       unmake_move(B, &mv[i], side, &u);
       if (side) {
         if (score >= beta) return beta;
@@ -471,7 +471,7 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
     }
 
     // best possible capture wont raise alpha
-    if (DELTA_PRUNE_ENABLED && DELTA_MARGIN > 0 && piecev >= 0 && abs(stand) < MATE - 2 * QUEEN_VALUE) {
+    if (DELTA_PRUNE_ENABLED && DELTA_MARGIN > 0 && piecev >= 0 && abs(stand) < MATE - 2 * SEE_QUEEN) {
       int max_gain = valv;
 
       if (caps[i].piece == PAWN) {
@@ -499,7 +499,7 @@ int quiesce(board* B, int side, int alpha, int beta, long* info, int qply) {
       unmake_move(B, &caps[i], side, &u);
       continue;
     }
-    int score = quiesce(B, !side, alpha, beta, info, qply + 1);
+    int score = quiesce(B, !side, alpha, beta, info, ply, qply + 1);
     unmake_move(B, &caps[i], side, &u);
 
     if (side) {
