@@ -10,6 +10,7 @@
 
 #define BOARD_SIZE (64)
 #define MATE (32000)
+#define INF (MATE + 1) // biggest score
 
 #define TT_ENABLED (1)
 #define TT_SIZE_MB (64)  // size in MB
@@ -102,13 +103,16 @@ static void init_ordering_tables(void);
 static inline int time_over(void);
 bot *init_bot(board *B, int white, int depth, int limit);
 double gtime(void);
-int minimax(board *B, int depth, int max, int alpha, int beta, long *info, int ply);
+int negamax(board *B, int depth, int side, int alpha, int beta, long *info, int ply);
 int quiesce(board *B, int side, int alpha, int beta, long *info, int ply, int qply);
 int oneply_check(board *B, int side, int alpha, int beta, long *info, int ply);
 int find_move(bot *bot, int is_white, int limit); // limit in seconds
 int find_move_ms(bot *bot, int is_white, int limit_ms);
 extern int bot_verbose;
 extern int bot_last_promo; // promo piece (KNIGHT..QUEEN) of last move, 0 else
+extern int bot_uci_info; // print UCI info lines per depth
+extern long bot_node_limit; // stop after X nodes, 0 no limit
+extern long bot_nodes; // nodes searched by the last find_move
 static inline int is_capture(const board *B, int side_to_move, const move_t *m);
 static inline int victim_square(const board *B, int side_to_move, int sq);
 static void move_sort(move_t *mv, int n);

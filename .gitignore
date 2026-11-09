@@ -9,3 +9,5 @@ chess
 test_engine
 __pycache__/
 build/
+config.json
+data/UHO_Lichess_4852_v1.epd

@@ -10,6 +10,17 @@ Current results:
 - 6/5/9 WDL against Stockfish 18 2500 ELO
 - Estimated 2450 ELO
 
+### Benchmarking
+- Bench command, grading nodes and nodes per second.
+  - 2,171,603 nodes
+  - 1,089,541 nps
+- SPRT, engine comparison
+  - Copy engine `cp build/uci build/uci_base`
+  - Build new engine `make uci`
+  - Run SPRT `tools/sprt.sh build/uci build/uci_base` with 100000 games (new vs. base)
+- go nodes N and info lines
+ - Example: `info depth 20 score cp 40 nodes 40451861 nps 1126384 time 35913 pv e2e4 e7e5 g1f3 d7d5 d2d4 d5e4 f3e5 f8b4 c2c3 b4d6 d1e2 c7c6 b1d2 d6e5 d4e5 g8e7 h2h3 e8g8 d2e4 c8e6 c1d2`
+
 ### Engine
 - Minimax with alpha–beta pruning (`minimax`)
 - Quiescence search on captures (`quiesce`)
